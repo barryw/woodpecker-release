@@ -31,18 +31,21 @@ cog_bump() {
 
   local output
   # shellcheck disable=SC2086
-  if ! output=$(cog bump $bump_args 2>&1); then
-    # Check if it's a "no bump needed" situation
-    if echo "$output" | grep -qi "no conventional commits\|No conventional commits\|no version bump"; then
-      echo "No version bump needed" >&2
-      return 1
-    fi
-    echo "ERROR: cog bump failed:" >&2
-    echo "$output" >&2
+  output=$(cog bump $bump_args 2>&1) || true
+
+  echo "$output" >&2
+
+  # Check if no bump was needed (cog may return 0 or non-zero for this)
+  if echo "$output" | grep -qi "no conventional commits\|no version bump\|nothing to bump\|required a bump"; then
+    echo "No version bump needed" >&2
     return 1
   fi
 
-  echo "$output" >&2
+  # Check for actual errors
+  if echo "$output" | grep -qi "^Error:"; then
+    echo "ERROR: cog bump failed" >&2
+    return 1
+  fi
 
   # Extract the new version from the latest tag
   local new_version
