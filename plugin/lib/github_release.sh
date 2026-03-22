@@ -38,8 +38,9 @@ github_release_create() {
   fi
 
   # Create the release (ignore if already exists)
-  gh release create "${args[@]}" 2>/dev/null \
-    || echo "Release ${version} already exists, continuing with asset upload"
+  if ! gh release create "${args[@]}" 2>&1; then
+    echo "Note: gh release create returned non-zero (release may already exist)"
+  fi
 }
 
 # Upload assets to an existing GitHub Release.

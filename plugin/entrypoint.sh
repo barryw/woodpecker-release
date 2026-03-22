@@ -33,6 +33,9 @@ echo "  Branch:  ${PLUGIN_GIT_BRANCH:-main}"
 echo "============================================"
 
 # --- Step 1: Git setup (all modes) ---
+# Export GH_TOKEN for the gh CLI (it reads this env var for auth)
+export GH_TOKEN="${PLUGIN_GITHUB_TOKEN:-}"
+
 git_configure
 git_ensure_full_history
 
