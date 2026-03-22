@@ -104,6 +104,15 @@ data:
   k8s_container: your-container
 ```
 
+**For a Terraform module** (validate + lint + security scan + test + release):
+```yaml
+template: release-terraform
+data:
+  terraform_version: "1.14"
+  python_version: "3.12"
+  docs_check: true
+```
+
 **For a simple library** (just validate commits + release, no build):
 ```yaml
 template: release-tag-only
@@ -162,6 +171,7 @@ The bump commit includes `[skip ci]` to prevent infinite pipeline loops.
 | `release-go-library` | validate-commits → lint → test → release | Go libraries |
 | `release-go-binary` | validate-commits → lint → unit-test → [acceptance-test] → release (cross-compile + GPG) | Go binaries, Terraform providers |
 | `release-docker` | validate-commits → lint → test → release → docker-build → [deploy] | Docker projects |
+| `release-terraform` | validate-commits → tf-validate → tflint → trivy → [checkov] → [pytest] → [tf-test] → [docs-check] → release | Terraform modules |
 
 ### Template Parameters
 
@@ -179,6 +189,23 @@ The bump commit includes `[skip ci]` to prevent infinite pipeline loops.
 | `gpg_sign` | `false` | Enable GPG signing |
 | `terraform_manifest` | `false` | Generate Terraform Registry manifest |
 | `pihole_test` | `false` | Enable PiHole acceptance test service |
+
+**release-terraform:**
+| Parameter | Default | Description |
+|---|---|---|
+| `terraform_version` | `1.14` | hashicorp/terraform image tag |
+| `python_version` | `3.12` | Python image tag for pytest step |
+| `python_test_deps` | `["pytest", "boto3", "botocore"]` | pip packages for tests |
+| `python_test_dir` | `tests/python/` | Path passed to pytest |
+| `tflint_version` | `v0.61.0` | tflint image tag |
+| `trivy_version` | `0.69.3` | trivy image tag |
+| `checkov` | `true` | Enable checkov security scan |
+| `checkov_version` | `3.2` | checkov image tag |
+| `pytest` | `true` | Enable pytest step |
+| `terraform_test` | `true` | Enable `terraform test` step |
+| `docs_check` | `false` | Enable terraform-docs drift check |
+| `docs_version` | `0.18.0` | terraform-docs image tag |
+| `release_branch` | `main` | Branch that triggers releases |
 
 **release-docker:**
 | Parameter | Default | Description |

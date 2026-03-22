@@ -1,0 +1,101 @@
+when:
+  - event: [push, pull_request]
+
+labels:
+  platform: linux/amd64
+
+clone:
+  git:
+    image: woodpeckerci/plugin-git
+    settings:
+      tags: true
+      depth: 0
+
+steps:
+  - name: validate-commits
+    image: ghcr.io/cocogitto/cog:latest
+    commands:
+      - git fetch --tags origin 2>/dev/null || true
+      - cog check --from-latest-tag 2>/dev/null || cog check 2>/dev/null || echo "Commit validation skipped"
+    when:
+      - event: push
+
+  - name: terraform-validate
+    image: hashicorp/terraform:{{or .terraform_version "1.14"}}
+    depends_on: []
+    commands:
+      - terraform init -backend=false
+      - terraform fmt -check -recursive
+      - terraform validate
+
+  - name: tflint
+    image: ghcr.io/terraform-linters/tflint:{{or .tflint_version "v0.61.0"}}
+    depends_on: []
+    commands:
+      - tflint --init
+      - tflint
+
+  - name: trivy
+    image: aquasec/trivy:{{or .trivy_version "0.69.3"}}
+    depends_on: []
+    commands:
+      - trivy config --exit-code 1 .
+{{if ne (printf "%v" .checkov) "false"}}
+  - name: checkov
+    image: bridgecrew/checkov:{{or .checkov_version "3.2"}}
+    depends_on: []
+    commands:
+      - checkov -d . --framework terraform --compact --quiet
+{{end}}
+{{if ne (printf "%v" .pytest) "false"}}
+  - name: pytest
+    image: python:{{or .python_version "3.12"}}-slim
+    depends_on: []
+    commands:
+      - pip install --quiet {{if .python_test_deps}}{{range .python_test_deps}}{{.}} {{end}}{{else}}pytest boto3 botocore {{end}}
+      - pytest {{or .python_test_dir "tests/python/"}} -v
+{{end}}
+{{if ne (printf "%v" .terraform_test) "false"}}
+  - name: terraform-test
+    image: hashicorp/terraform:{{or .terraform_version "1.14"}}
+    depends_on: []
+    commands:
+      - terraform init -backend=false
+      - terraform test
+{{end}}
+{{if .docs_check}}
+  - name: docs-check
+    image: quay.io/terraform-docs/terraform-docs:{{or .docs_version "0.18.0"}}
+    depends_on: []
+    commands:
+      - /terraform-docs . --output-check
+{{end}}
+
+  - name: release
+    image: ghcr.io/barryw/woodpecker-release:latest
+    pull: true
+    environment:
+      PLUGIN_GITHUB_TOKEN:
+        from_secret: github_token
+      PLUGIN_GIT_EMAIL: ci@barrywalker.io
+      PLUGIN_MODE: release-tag
+    when:
+      - event: push
+        branch: {{or .release_branch "main"}}
+    depends_on:
+      - validate-commits
+      - terraform-validate
+      - tflint
+      - trivy
+{{- if ne (printf "%v" .checkov) "false"}}
+      - checkov
+{{- end}}
+{{- if ne (printf "%v" .pytest) "false"}}
+      - pytest
+{{- end}}
+{{- if ne (printf "%v" .terraform_test) "false"}}
+      - terraform-test
+{{- end}}
+{{- if .docs_check}}
+      - docs-check
+{{- end}}
