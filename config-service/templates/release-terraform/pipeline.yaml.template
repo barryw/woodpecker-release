@@ -58,17 +58,15 @@ steps:
 {{if ne (printf "%v" .terraform_test) "false"}}
   - name: terraform-test
     image: hashicorp/terraform:{{or .terraform_version "1.14"}}
-    depends_on: []
+    depends_on: [terraform-validate]
     commands:
-      - terraform init -backend=false
       - terraform test
 {{end}}
 {{if ne (printf "%v" .opentofu_validate) "false"}}
   - name: opentofu-validate
     image: ghcr.io/opentofu/opentofu:{{or .opentofu_version "1.9"}}
-    depends_on: []
+    depends_on: [terraform-validate]
     commands:
-      - tofu init -backend=false
       - tofu validate
       - tofu test
 {{end}}
