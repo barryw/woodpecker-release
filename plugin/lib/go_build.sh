@@ -53,8 +53,8 @@ go_build_checksums() {
   local clean_version="${version#v}"
   local checksums_file="dist/${binary_name}_${clean_version}_SHA256SUMS"
 
-  echo "Generating checksums..."
+  echo "Generating checksums..." >&2
   (cd dist && sha256sum *.zip *.json 2>/dev/null > "$(basename "$checksums_file")")
-  echo "Checksums written to ${checksums_file}"
+  echo "Checksums written to ${checksums_file}" >&2
   echo "$checksums_file"
 }
