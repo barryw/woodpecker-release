@@ -63,6 +63,15 @@ steps:
       - terraform init -backend=false
       - terraform test
 {{end}}
+{{if ne (printf "%v" .opentofu_validate) "false"}}
+  - name: opentofu-validate
+    image: ghcr.io/opentofu/opentofu:{{or .opentofu_version "1.9"}}
+    depends_on: []
+    commands:
+      - tofu init -backend=false
+      - tofu validate
+      - tofu test
+{{end}}
 {{if .docs_check}}
   - name: docs-check
     image: quay.io/terraform-docs/terraform-docs:{{or .docs_version "0.18.0"}}
@@ -95,6 +104,9 @@ steps:
 {{- end}}
 {{- if ne (printf "%v" .terraform_test) "false"}}
       - terraform-test
+{{- end}}
+{{- if ne (printf "%v" .opentofu_validate) "false"}}
+      - opentofu-validate
 {{- end}}
 {{- if .docs_check}}
       - docs-check

@@ -171,7 +171,7 @@ The bump commit includes `[skip ci]` to prevent infinite pipeline loops.
 | `release-go-library` | validate-commits → lint → test → release | Go libraries |
 | `release-go-binary` | validate-commits → lint → unit-test → [acceptance-test] → release (cross-compile + GPG) | Go binaries, Terraform providers |
 | `release-docker` | validate-commits → lint → test → release → docker-build → [deploy] | Docker projects |
-| `release-terraform` | validate-commits → tf-validate → tflint → trivy → [checkov] → [pytest] → [tf-test] → [docs-check] → release | Terraform modules |
+| `release-terraform` | validate-commits → tf-validate → tflint → trivy → [checkov] → [pytest] → [tf-test] → [tofu-validate] → [docs-check] → release | Terraform modules |
 
 ### Template Parameters
 
@@ -203,6 +203,8 @@ The bump commit includes `[skip ci]` to prevent infinite pipeline loops.
 | `checkov_version` | `3` | checkov image tag |
 | `pytest` | `true` | Enable pytest step |
 | `terraform_test` | `true` | Enable `terraform test` step |
+| `opentofu_validate` | `true` | Enable OpenTofu validation + test |
+| `opentofu_version` | `1.9` | OpenTofu image tag |
 | `docs_check` | `false` | Enable terraform-docs drift check |
 | `docs_version` | `0.18.0` | terraform-docs image tag |
 | `release_branch` | `main` | Branch that triggers releases |
