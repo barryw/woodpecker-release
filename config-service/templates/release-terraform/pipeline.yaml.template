@@ -42,7 +42,7 @@ steps:
       - trivy config --exit-code 1 .
 {{if ne (printf "%v" .checkov) "false"}}
   - name: checkov
-    image: bridgecrew/checkov:{{or .checkov_version "3.2"}}
+    image: bridgecrew/checkov:{{or .checkov_version "3"}}
     depends_on: []
     commands:
       - checkov -d . --framework terraform --compact --quiet
@@ -68,7 +68,7 @@ steps:
     image: quay.io/terraform-docs/terraform-docs:{{or .docs_version "0.18.0"}}
     depends_on: []
     commands:
-      - /terraform-docs . --output-check
+      - terraform-docs . --output-check
 {{end}}
 
   - name: release
