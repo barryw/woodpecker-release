@@ -42,11 +42,19 @@ git_ensure_full_history
 # --- Step 2: Version bump (all modes) ---
 VERSION_FILE="${PLUGIN_VERSION_FILE:-/woodpecker/version.txt}"
 
-NEW_VERSION=$(cog_bump) || {
+bump_exit=0
+NEW_VERSION=$(cog_bump) || bump_exit=$?
+
+if [ "$bump_exit" -eq 1 ]; then
+  # Return code 1 = no bump needed (benign)
   echo "No version bump needed. Exiting cleanly."
   echo "NONE" > "$VERSION_FILE"
   exit 0
-}
+elif [ "$bump_exit" -ne 0 ]; then
+  # Return code 2+ = actual error
+  echo "ERROR: Version bump failed (exit code ${bump_exit}). Failing pipeline." >&2
+  exit 1
+fi
 
 echo "New version: ${NEW_VERSION}"
 

@@ -41,10 +41,10 @@ cog_bump() {
     return 1
   fi
 
-  # Check for actual errors
-  if echo "$output" | grep -qi "^Error:"; then
+  # Check for actual errors (return 2 to distinguish from "no bump needed" which returns 1)
+  if echo "$output" | grep -qi "^Error:\|fatal error"; then
     echo "ERROR: cog bump failed" >&2
-    return 1
+    return 2
   fi
 
   # Extract the new version from the latest tag
