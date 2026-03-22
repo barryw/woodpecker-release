@@ -1,0 +1,64 @@
+{{- /* release-docker: For projects that build Docker images and push to GHCR */ -}}
+when:
+  - event: [push, pull_request]
+
+labels:
+  platform: linux/amd64
+
+clone:
+  git:
+    image: woodpeckerci/plugin-git
+    settings:
+      tags: true
+      depth: 0
+
+steps:
+  - name: validate-commits
+    image: ghcr.io/cocogitto/cog:latest
+    commands:
+      - cog check
+      - echo "All commits follow conventional commit format"
+    when:
+      - event: push
+
+{{- if .Params.test_commands }}
+  - name: test
+    image: {{ or .Params.test_image "python:3.12-slim" }}
+    commands:
+{{- range .Params.test_commands }}
+      - {{ . }}
+{{- end }}
+{{- end }}
+
+  - name: release
+    image: ghcr.io/barryw/woodpecker-release:latest
+    environment:
+      PLUGIN_GITHUB_TOKEN:
+        from_secret: github_token
+    settings:
+      mode: release-tag
+    when:
+      - event: push
+        branch: main
+    depends_on:
+      - validate-commits
+{{- if .Params.test_commands }}
+      - test
+{{- end }}
+
+  - name: docker-build
+    image: woodpeckerci/plugin-docker-buildx
+    settings:
+      repo: {{ or .Params.image_name (printf "ghcr.io/barryw/%s" .Repo.Name) }}
+      tags: latest
+      auto_tag: true
+      registry: ghcr.io
+      username: barryw
+      password:
+        from_secret: github_token
+      dockerfile: {{ or .Params.dockerfile "Dockerfile" }}
+      context: {{ or .Params.docker_context "." }}
+    when:
+      - event: push
+        branch: main
+    depends_on: [release]

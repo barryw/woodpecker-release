@@ -1,0 +1,30 @@
+{{- /* release-tag-only: For libraries and projects that only need tag + changelog + GitHub Release */ -}}
+when:
+  - event: push
+    branch: main
+
+labels:
+  platform: linux/amd64
+
+clone:
+  git:
+    image: woodpeckerci/plugin-git
+    settings:
+      tags: true
+      depth: 0
+
+steps:
+  - name: validate-commits
+    image: ghcr.io/cocogitto/cog:latest
+    commands:
+      - cog check
+      - echo "All commits follow conventional commit format"
+
+  - name: release
+    image: ghcr.io/barryw/woodpecker-release:latest
+    environment:
+      PLUGIN_GITHUB_TOKEN:
+        from_secret: github_token
+    settings:
+      mode: release-tag
+    depends_on: [validate-commits]

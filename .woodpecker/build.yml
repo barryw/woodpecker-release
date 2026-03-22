@@ -1,0 +1,50 @@
+when:
+  - event: [push, pull_request]
+
+labels:
+  platform: linux/amd64
+
+steps:
+  - name: lint
+    image: koalaman/shellcheck:stable
+    commands:
+      - shellcheck plugin/entrypoint.sh plugin/lib/*.sh
+
+  - name: test
+    image: bats/bats:latest
+    commands:
+      - bats plugin/test/
+
+  - name: build-base
+    image: woodpeckerci/plugin-docker-buildx
+    settings:
+      repo: ghcr.io/barryw/woodpecker-release
+      tags: latest
+      target: base
+      registry: ghcr.io
+      username: barryw
+      password:
+        from_secret: github_token
+      dockerfile: plugin/Dockerfile
+      context: plugin
+    when:
+      - event: push
+        branch: main
+    depends_on: [lint, test]
+
+  - name: build-go
+    image: woodpeckerci/plugin-docker-buildx
+    settings:
+      repo: ghcr.io/barryw/woodpecker-release
+      tags: go
+      target: go
+      registry: ghcr.io
+      username: barryw
+      password:
+        from_secret: github_token
+      dockerfile: plugin/Dockerfile
+      context: plugin
+    when:
+      - event: push
+        branch: main
+    depends_on: [lint, test]
