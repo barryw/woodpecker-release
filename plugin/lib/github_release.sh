@@ -17,7 +17,7 @@ github_release_create() {
   fi
 
   # Detect pre-release versions
-  if echo "$version" | grep -qE '-(alpha|beta|rc|dev)'; then
+  if [[ "$version" =~ -(alpha|beta|rc|dev) ]]; then
     prerelease_flag="--prerelease"
     echo "Detected pre-release version: ${version}"
   fi
