@@ -65,8 +65,11 @@ steps:
 {{if ne (printf "%v" .opentofu_validate) "false"}}
   - name: opentofu-validate
     image: ghcr.io/opentofu/opentofu:{{or .opentofu_version "1.9"}}
-    depends_on: [terraform-validate]
+    depends_on: []
+    environment:
+      TF_DATA_DIR: /tmp/.tofu
     commands:
+      - tofu init -backend=false
       - tofu validate
       - tofu test
 {{end}}
