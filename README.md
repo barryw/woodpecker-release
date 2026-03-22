@@ -200,7 +200,7 @@ The bump commit includes `[skip ci]` to prevent infinite pipeline loops.
 | `tflint_version` | `v0.61.0` | tflint image tag |
 | `trivy_version` | `0.69.3` | trivy image tag |
 | `checkov` | `true` | Enable checkov security scan |
-| `checkov_version` | `3.2` | checkov image tag |
+| `checkov_version` | `3` | checkov image tag |
 | `pytest` | `true` | Enable pytest step |
 | `terraform_test` | `true` | Enable `terraform test` step |
 | `docs_check` | `false` | Enable terraform-docs drift check |
