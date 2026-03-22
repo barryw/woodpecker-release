@@ -17,7 +17,7 @@ RUN apk add --no-cache \
 # Install cocogitto (cog)
 RUN curl -sL "https://github.com/cocogitto/cocogitto/releases/download/${COG_VERSION}/cocogitto-${COG_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
     | tar xz -C /tmp \
-    && mv /tmp/cog /usr/local/bin/cog \
+    && mv /tmp/x86_64-unknown-linux-musl/cog /usr/local/bin/cog \
     && chmod +x /usr/local/bin/cog \
     && rm -rf /tmp/*
 
