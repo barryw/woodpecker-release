@@ -66,12 +66,8 @@ steps:
   - name: opentofu-validate
     image: ghcr.io/opentofu/opentofu:{{or .opentofu_version "1.9"}}
     depends_on: []
-    environment:
-      TF_DATA_DIR: /tmp/.tofu
     commands:
-      - tofu init -backend=false
-      - tofu validate
-      - tofu test
+      - cp -r . /tmp/tofu-workspace && cd /tmp/tofu-workspace && rm -rf .terraform .terraform.lock.hcl && tofu init -backend=false && tofu validate && tofu test
 {{end}}
 {{if .docs_check}}
   - name: docs-check

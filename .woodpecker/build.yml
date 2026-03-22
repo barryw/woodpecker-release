@@ -16,50 +16,42 @@ steps:
       - bats plugin/test/
 
   - name: build-plugin-base
-    image: woodpeckerci/plugin-docker-buildx
-    settings:
-      repo: ghcr.io/barryw/woodpecker-release
-      tags: latest
-      target: base
-      registry: ghcr.io
-      username: barryw
-      password:
+    image: gcr.io/kaniko-project/executor:debug
+    environment:
+      GHCR_TOKEN:
         from_secret: github_token
-      dockerfile: plugin/Dockerfile
-      context: plugin
+    commands:
+      - mkdir -p /kaniko/.docker
+      - 'echo "{\"auths\":{\"ghcr.io\":{\"username\":\"barryw\",\"password\":\"$GHCR_TOKEN\"}}}" > /kaniko/.docker/config.json'
+      - /kaniko/executor --dockerfile=plugin/Dockerfile --context=plugin --target=base --destination=ghcr.io/barryw/woodpecker-release:latest
     when:
       - event: push
         branch: main
     depends_on: [lint, test]
 
   - name: build-plugin-go
-    image: woodpeckerci/plugin-docker-buildx
-    settings:
-      repo: ghcr.io/barryw/woodpecker-release
-      tags: go
-      target: go
-      registry: ghcr.io
-      username: barryw
-      password:
+    image: gcr.io/kaniko-project/executor:debug
+    environment:
+      GHCR_TOKEN:
         from_secret: github_token
-      dockerfile: plugin/Dockerfile
-      context: plugin
+    commands:
+      - mkdir -p /kaniko/.docker
+      - 'echo "{\"auths\":{\"ghcr.io\":{\"username\":\"barryw\",\"password\":\"$GHCR_TOKEN\"}}}" > /kaniko/.docker/config.json'
+      - /kaniko/executor --dockerfile=plugin/Dockerfile --context=plugin --target=go --destination=ghcr.io/barryw/woodpecker-release:go
     when:
       - event: push
         branch: main
     depends_on: [lint, test]
 
   - name: build-config-service
-    image: woodpeckerci/plugin-docker-buildx
-    settings:
-      repo: ghcr.io/barryw/woodpecker-config-service
-      tags: latest
-      registry: ghcr.io
-      username: barryw
-      password:
+    image: gcr.io/kaniko-project/executor:debug
+    environment:
+      GHCR_TOKEN:
         from_secret: github_token
-      dockerfile: config-service/Dockerfile
-      context: config-service
+    commands:
+      - mkdir -p /kaniko/.docker
+      - 'echo "{\"auths\":{\"ghcr.io\":{\"username\":\"barryw\",\"password\":\"$GHCR_TOKEN\"}}}" > /kaniko/.docker/config.json'
+      - /kaniko/executor --dockerfile=config-service/Dockerfile --context=config-service --destination=ghcr.io/barryw/woodpecker-config-service:latest
     when:
       - event: push
         branch: main
