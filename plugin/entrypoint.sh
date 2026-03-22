@@ -40,12 +40,19 @@ git_configure
 git_ensure_full_history
 
 # --- Step 2: Version bump (all modes) ---
+VERSION_FILE="${PLUGIN_VERSION_FILE:-/woodpecker/version.txt}"
+
 NEW_VERSION=$(cog_bump) || {
   echo "No version bump needed. Exiting cleanly."
+  echo "NONE" > "$VERSION_FILE"
   exit 0
 }
 
 echo "New version: ${NEW_VERSION}"
+
+# Write version to shared file for downstream steps
+echo "$NEW_VERSION" > "$VERSION_FILE"
+echo "Version written to ${VERSION_FILE}"
 
 # --- Step 3: Push commit and tag (all modes) ---
 git_push_commit

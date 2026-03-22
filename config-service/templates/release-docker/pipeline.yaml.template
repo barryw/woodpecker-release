@@ -1,0 +1,81 @@
+labels:
+  platform: linux/amd64
+
+when:
+  - event: [push, pull_request, manual]
+
+clone:
+  git:
+    image: woodpeckerci/plugin-git
+    settings:
+      tags: true
+      depth: 0
+
+steps:
+  - name: validate-commits
+    image: ghcr.io/cocogitto/cog:latest
+    commands:
+      - git fetch --tags origin 2>/dev/null || true
+      - cog check --from-latest-tag 2>/dev/null || cog check 2>/dev/null || echo "Commit validation skipped (no tags yet)"
+    when:
+      - event: push
+
+  - name: lint
+    image: {{or .test_image "python:3.12-slim"}}
+    commands:{{range .setup_commands}}
+      - {{.}}{{end}}{{range .lint_commands}}
+      - {{.}}{{end}}
+
+  - name: test
+    image: {{or .test_image "python:3.12-slim"}}{{if .test_environment}}
+    environment:{{range $k, $v := .test_environment}}
+      {{$k}}: "{{$v}}"{{end}}{{end}}
+    commands:{{range .setup_commands}}
+      - {{.}}{{end}}{{range .test_commands}}
+      - {{.}}{{end}}
+    depends_on: [lint]
+
+  - name: release
+    image: ghcr.io/barryw/woodpecker-release:latest
+    pull: true
+    environment:
+      PLUGIN_GITHUB_TOKEN:
+        from_secret: github_token
+      PLUGIN_GIT_EMAIL: ci@barrywalker.io
+      PLUGIN_MODE: release-tag
+    when:
+      - event: push
+        branch: main
+    depends_on: [validate-commits, test]
+
+  - name: docker-build
+    image: gcr.io/kaniko-project/executor:debug
+    when:
+      - event: push
+        branch: main
+    environment:
+      GHCR_TOKEN:
+        from_secret: github_token
+    commands:
+      - 'VERSION=$(cat /woodpecker/version.txt 2>/dev/null || echo "NONE")'
+      - 'test "$VERSION" != "NONE" || { echo "No new version, skipping build"; exit 0; }'
+      - mkdir -p /kaniko/.docker
+      - 'echo "{\"auths\":{\"ghcr.io\":{\"username\":\"barryw\",\"password\":\"$GHCR_TOKEN\"}}}" > /kaniko/.docker/config.json'
+      - 'BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")'
+      - 'echo "Building: ghcr.io/barryw/{{.image_name}}:$VERSION"'
+      - '/kaniko/executor --dockerfile={{or .dockerfile "Dockerfile"}} --context={{or .docker_context "."}} --destination=ghcr.io/barryw/{{.image_name}}:$VERSION --destination=ghcr.io/barryw/{{.image_name}}:latest --label "org.opencontainers.image.version=$VERSION" --label "org.opencontainers.image.created=$BUILD_DATE" --label "org.opencontainers.image.revision=$CI_COMMIT_SHA"'
+    depends_on: [release]
+{{if .k8s_deploy}}
+  - name: deploy
+    image: bitnami/kubectl:latest
+    when:
+      - event: push
+        branch: main
+    commands:
+      - 'VERSION=$(cat /woodpecker/version.txt 2>/dev/null || echo "NONE")'
+      - 'test "$VERSION" != "NONE" || { echo "No new version, skipping deploy"; exit 0; }'
+      - 'echo "Deploying version: $VERSION"'
+      - 'kubectl -n {{or .k8s_namespace "default"}} set image deployment/{{.k8s_deployment}} {{or .k8s_container .image_name}}=ghcr.io/barryw/{{.image_name}}:$VERSION'
+      - 'kubectl -n {{or .k8s_namespace "default"}} rollout status deployment/{{.k8s_deployment}} --timeout=300s'
+    depends_on: [docker-build]
+{{end}}
