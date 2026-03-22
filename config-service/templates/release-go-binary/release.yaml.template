@@ -1,0 +1,35 @@
+when:
+  - event: push
+    branch: main
+
+labels:
+  platform: linux/amd64
+
+clone:
+  git:
+    image: woodpeckerci/plugin-git
+    settings:
+      tags: true
+      depth: 0
+
+depends_on:
+  - test
+  - commits
+
+steps:
+  - name: release
+    image: ghcr.io/barryw/woodpecker-release:go
+    pull: true
+    environment:
+      PLUGIN_GITHUB_TOKEN:
+        from_secret: github_token{{if .gpg_sign}}
+      PLUGIN_GPG_KEY:
+        from_secret: gpg_private_key
+      PLUGIN_GPG_FINGERPRINT:
+        from_secret: gpg_fingerprint{{end}}
+      PLUGIN_MODE: release-go
+      PLUGIN_GIT_EMAIL: ci@barrywalker.io
+      PLUGIN_GO_PLATFORMS: {{or .go_platforms "linux/amd64,linux/arm64,darwin/amd64,darwin/arm64,windows/amd64"}}
+      PLUGIN_GO_BINARY_NAME: {{or .go_binary_name "app"}}
+      PLUGIN_GPG_SIGN: "{{or .gpg_sign "false"}}"
+      PLUGIN_TERRAFORM_MANIFEST: "{{or .terraform_manifest "false"}}"

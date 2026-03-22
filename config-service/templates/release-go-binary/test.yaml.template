@@ -1,0 +1,55 @@
+when:
+  - event: [push, pull_request, manual]
+
+labels:
+  platform: linux/amd64
+{{if .pihole_test}}
+services:
+  pihole-test:
+    image: pihole/pihole:latest
+    environment:
+      FTLCONF_webserver_api_password: test-password
+      FTLCONF_webserver_api_app_sudo: "true"
+      FTLCONF_webserver_api_max_sessions: "256"
+      DNSMASQ_LISTENING: all
+      PIHOLE_DNS_: "8.8.8.8"
+    ports:
+      - 80
+{{end}}
+steps:
+  - name: lint
+    image: golang:{{or .go_version "1.25"}}
+    commands:
+      - go vet ./...
+
+  - name: unit-test
+    image: golang:{{or .go_version "1.25"}}
+    commands:
+      - go test -v -count=1 ./...
+    depends_on: [lint]
+{{if .pihole_test}}
+  - name: acceptance-test
+    image: golang:{{or .go_version "1.25"}}
+    environment:
+      PIHOLE_URL: http://pihole-test:80
+      PIHOLE_PASSWORD: test-password
+      TF_ACC: 1
+    commands:
+      - apt-get update -qq && apt-get install -y -qq curl > /dev/null 2>&1
+      - |
+        echo "Waiting for PiHole API..."
+        for i in $(seq 1 90); do
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://pihole-test:80/api/auth 2>/dev/null)
+          if [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "200" ]; then
+            echo "PiHole API is ready (HTTP $HTTP_CODE) after attempt $i"
+            break
+          fi
+          if [ "$i" = "90" ]; then
+            echo "PiHole failed to become ready after 90 attempts"
+            exit 1
+          fi
+          sleep 3
+        done
+      - go test -v -timeout 30m ./internal/provider/ -count=1
+    depends_on: [unit-test]
+{{end}}

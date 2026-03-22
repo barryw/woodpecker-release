@@ -1,0 +1,2 @@
+# Config service deploys in the existing woodpecker namespace
+# No separate namespace needed

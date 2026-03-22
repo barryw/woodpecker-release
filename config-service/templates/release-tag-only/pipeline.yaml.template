@@ -1,7 +1,5 @@
-{{- /* release-tag-only: For libraries and projects that only need tag + changelog + GitHub Release */ -}}
 when:
-  - event: push
-    branch: main
+  - event: [push, pull_request]
 
 labels:
   platform: linux/amd64
@@ -18,13 +16,18 @@ steps:
     image: ghcr.io/cocogitto/cog:latest
     commands:
       - cog check
-      - echo "All commits follow conventional commit format"
+    when:
+      - event: push
 
   - name: release
     image: ghcr.io/barryw/woodpecker-release:latest
+    pull: true
     environment:
       PLUGIN_GITHUB_TOKEN:
         from_secret: github_token
-    settings:
-      mode: release-tag
+      PLUGIN_GIT_EMAIL: ci@barrywalker.io
+      PLUGIN_MODE: release-tag
+    when:
+      - event: push
+        branch: main
     depends_on: [validate-commits]

@@ -1,0 +1,44 @@
+when:
+  - event: [push, pull_request]
+
+labels:
+  platform: linux/amd64
+
+clone:
+  git:
+    image: woodpeckerci/plugin-git
+    settings:
+      tags: true
+      depth: 0
+
+steps:
+  - name: validate-commits
+    image: ghcr.io/cocogitto/cog:latest
+    commands:
+      - cog check
+    when:
+      - event: push
+
+  - name: lint
+    image: golang:{{or .go_version "1.25"}}
+    commands:
+      - go vet ./...
+
+  - name: test
+    image: golang:{{or .go_version "1.25"}}
+    commands:
+      - go test -v -race -count=1 ./...
+    depends_on: [lint]
+
+  - name: release
+    image: ghcr.io/barryw/woodpecker-release:latest
+    pull: true
+    environment:
+      PLUGIN_GITHUB_TOKEN:
+        from_secret: github_token
+      PLUGIN_GIT_EMAIL: ci@barrywalker.io
+      PLUGIN_MODE: release-tag
+    when:
+      - event: push
+        branch: main
+    depends_on: [validate-commits, test]
