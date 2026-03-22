@@ -6,8 +6,9 @@ labels:
 
 steps:
   - name: lint
-    image: koalaman/shellcheck:stable
+    image: alpine:3.21
     commands:
+      - apk add --no-cache shellcheck > /dev/null 2>&1
       - shellcheck --severity=warning plugin/entrypoint.sh plugin/lib/*.sh
 
   - name: test
