@@ -41,6 +41,12 @@ cog_bump() {
     return 1
   fi
 
+  # Tag already exists = version already released, treat as no-op
+  if echo "$output" | grep -qi "tag already exists"; then
+    echo "Target version tag already exists — nothing to bump" >&2
+    return 1
+  fi
+
   # Check for actual errors (return 2 to distinguish from "no bump needed" which returns 1)
   if echo "$output" | grep -qi "^Error:\|fatal error"; then
     echo "ERROR: cog bump failed" >&2
