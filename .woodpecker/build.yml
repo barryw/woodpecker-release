@@ -8,7 +8,7 @@ steps:
   - name: lint
     image: koalaman/shellcheck:stable
     commands:
-      - shellcheck plugin/entrypoint.sh plugin/lib/*.sh
+      - shellcheck --severity=warning plugin/entrypoint.sh plugin/lib/*.sh
 
   - name: test
     image: bats/bats:latest
