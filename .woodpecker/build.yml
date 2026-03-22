@@ -15,7 +15,7 @@ steps:
     commands:
       - bats plugin/test/
 
-  - name: build-base
+  - name: build-plugin-base
     image: woodpeckerci/plugin-docker-buildx
     settings:
       repo: ghcr.io/barryw/woodpecker-release
@@ -32,7 +32,7 @@ steps:
         branch: main
     depends_on: [lint, test]
 
-  - name: build-go
+  - name: build-plugin-go
     image: woodpeckerci/plugin-docker-buildx
     settings:
       repo: ghcr.io/barryw/woodpecker-release
@@ -48,3 +48,30 @@ steps:
       - event: push
         branch: main
     depends_on: [lint, test]
+
+  - name: build-config-service
+    image: woodpeckerci/plugin-docker-buildx
+    settings:
+      repo: ghcr.io/barryw/woodpecker-config-service
+      tags: latest
+      registry: ghcr.io
+      username: barryw
+      password:
+        from_secret: github_token
+      dockerfile: config-service/Dockerfile
+      context: config-service
+    when:
+      - event: push
+        branch: main
+    depends_on: [lint, test]
+
+  - name: restart-config-service
+    image: bitnami/kubectl:latest
+    commands:
+      - kubectl rollout restart deployment/woodpecker-config-service -n woodpecker
+      - kubectl rollout status deployment/woodpecker-config-service -n woodpecker --timeout=60s
+      - echo "Config service restarted with new image"
+    when:
+      - event: push
+        branch: main
+    depends_on: [build-config-service]
