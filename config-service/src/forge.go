@@ -46,7 +46,7 @@ func getTemplateFileFromForge(req woodpeckerRequest, _ []byte) ([]byte, bool) {
 
 	httpReq.Header.Set("Accept", "application/vnd.github.v3+json")
 	if req.Netrc != nil && req.Netrc.Password != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+req.Netrc.Password)
+		httpReq.SetBasicAuth(req.Netrc.Login, req.Netrc.Password)
 	}
 
 	resp, err := http.DefaultClient.Do(httpReq)
