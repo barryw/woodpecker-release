@@ -50,7 +50,7 @@ spec:
               cpu: 10m
               memory: 32Mi
             limits:
-              memory: 512Mi
+              memory: 1Gi
           securityContext:
             readOnlyRootFilesystem: true
             runAsNonRoot: true
