@@ -11,7 +11,7 @@ cog_bump() {
   local bump_mode="${PLUGIN_BUMP_MODE:-auto}"
   local skip_ci_marker="[skip ci]"
 
-  echo "Running cog bump (mode: ${bump_mode})..."
+  echo "Running cog bump (mode: ${bump_mode})..." >&2
 
   local bump_args="--skip-ci"
   case "$bump_mode" in
@@ -34,7 +34,7 @@ cog_bump() {
   if ! output=$(cog bump $bump_args 2>&1); then
     # Check if it's a "no bump needed" situation
     if echo "$output" | grep -qi "no conventional commits\|No conventional commits\|no version bump"; then
-      echo "No version bump needed"
+      echo "No version bump needed" >&2
       return 1
     fi
     echo "ERROR: cog bump failed:" >&2
