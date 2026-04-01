@@ -14,7 +14,6 @@ clone:
 steps:
   - name: validate-commits
     image: ghcr.io/cocogitto/cog:6.2.0
-    entrypoint: ["/bin/sh", "-c"]
     commands:
       - git fetch --tags origin 2>/dev/null || true
       - cog check --from-latest-tag 2>/dev/null || cog check 2>/dev/null || echo "Commit validation skipped (no tags yet)"
