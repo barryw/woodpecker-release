@@ -228,6 +228,28 @@ short-lived, so the ~1h token is a natural fit with no rotation. This needs the
 org-level `gh_app_id` / `gh_app_installation_id` / `gh_app_private_key` secrets.
 The PAT remains wired as a fallback until it is retired (WAL-69 step 4).
 
+**`release-macos-app` (native darwin/arm64 runner) — WAL-73.** The local backend
+runs commands straight on the host with no plugin image, so the minter cannot be
+baked into a container. Instead vendor the two files into the product repo's
+`Scripts/` (they are committed alongside the existing `Scripts/` helpers):
+
+```bash
+# from barryw/woodpecker-release/plugin/ (keep in sync with the canonical copy)
+cp plugin/mint-installation-token.sh  <repo>/Scripts/mint-installation-token.sh
+cp plugin/profiles.env                <repo>/Scripts/whi-token-profiles.env
+```
+
+Both the `version` (git push) and `release` (`gh release create`) steps then
+mint a fresh token (re-minting in `release` because the build/notarize wait can
+outlast the ~1h token). `openssl`, `curl`, and `jq` are already documented runner
+deps. Optional overrides — point at a runner-image-vendored copy once one exists:
+
+| Param | Default | Purpose |
+|---|---|---|
+| `minter_path` | `Scripts/mint-installation-token.sh` | path to the minter on the runner / in the checkout |
+| `minter_profiles` | `Scripts/whi-token-profiles.env` | path to the `profiles.env` the minter reads |
+| `minter_profile` | `product-ci` | named profile to mint (repos + permission scope) |
+
 ### Step 6: Commit and push
 
 ```bash
