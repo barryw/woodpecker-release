@@ -173,6 +173,31 @@ data:
 template: release-tag-only
 ```
 
+**For a repo that needs more than one pipeline** (e.g. a macOS app **and** its
+marketing site deployed from the same repo) use the `templates:` list form
+instead of the single `template:` field. Each entry is rendered and the
+generated configs are namespaced (`<template>-pipeline.yaml`) so they don't
+collide:
+```yaml
+templates:
+  - template: release-macos-app
+    data:
+      app_name: "Miggy Draw"
+      scheme: "Miggy Draw"
+      project: "RetroDraw.xcodeproj"
+      team_id: "74E8LUBSW9"
+      signing_identity: "Developer ID Application: Barry Walker (74E8LUBSW9)"
+      artifact_base: "MiggyDraw"
+      notary_team_id: "Z4M6ST45N5"
+  - template: release-static-site
+    data:
+      site: miggydraw
+      k8s_namespace: miggydraw
+```
+The single `template:` form is unchanged and still produces a `pipeline.yaml`
+config. (An unknown template name in the `templates:` list is rejected rather
+than silently dropped, so a typo can't quietly remove a pipeline.)
+
 ### Step 4: Remove old pipeline files
 
 Delete any existing `.woodpecker.yml`, `.woodpecker/*.yml` files. The config service generates the pipeline from the template.

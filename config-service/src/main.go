@@ -36,9 +36,20 @@ type configData struct {
 	Data string `json:"data"`
 }
 
-type templateData struct {
+// templateRef is one entry of a multi-template `templates:` list.
+type templateRef struct {
 	Template string `yaml:"template"`
 	Data     any    `yaml:"data"`
+}
+
+type templateData struct {
+	// Single-template form (backward compatible): `template:` + `data:`.
+	Template string `yaml:"template"`
+	Data     any    `yaml:"data"`
+	// Multi-template form: a repo that needs more than one pipeline (e.g. a
+	// macOS app release AND a static-site deploy) lists them here. When set,
+	// it takes precedence over the single `template:` field.
+	Templates []templateRef `yaml:"templates"`
 }
 
 // Based on https://github.com/woodpecker-ci/example-config-service/blob/main/main.go
@@ -130,7 +141,37 @@ func handleHttpRequest(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 
-	generatedConfigs := generateConfigs(templateData.Template, templateData.Data)
+	// Resolve the list of templates to render. Prefer the multi-template
+	// `templates:` list; fall back to the single `template:` field.
+	refs := templateData.Templates
+	if len(refs) == 0 && templateData.Template != "" {
+		refs = []templateRef{{Template: templateData.Template, Data: templateData.Data}}
+	}
+
+	multi := len(refs) > 1
+
+	var generatedConfigs []configData
+	for _, ref := range refs {
+		configs := generateConfigs(ref.Template, ref.Data)
+		if configs == nil {
+			// In multi-template mode a bad/unknown template name would silently
+			// drop a pipeline (e.g. lose the site deploy) — fail loudly instead.
+			if multi {
+				http.Error(writer, fmt.Sprintf("Unknown or invalid template: %q", ref.Template), http.StatusBadRequest)
+				return
+			}
+			continue
+		}
+		// Namespace config names so two templates that both emit `pipeline.yaml`
+		// don't collide. Single-template mode keeps the original name for
+		// backward compatibility.
+		if multi {
+			for i := range configs {
+				configs[i].Name = ref.Template + "-" + configs[i].Name
+			}
+		}
+		generatedConfigs = append(generatedConfigs, configs...)
+	}
 
 	if generatedConfigs != nil {
 		writer.WriteHeader(http.StatusOK)
