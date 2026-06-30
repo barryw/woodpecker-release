@@ -14,6 +14,13 @@ git_configure() {
   git config --global user.email "$git_email"
   git config --global --add safe.directory "$CI_WORKSPACE"
 
+  # Never use an OS credential helper (WAL-101). Auth is carried in the remote
+  # URL below, so no helper is needed. Harmless on the Linux plugin container;
+  # protective if this ever runs on a darwin host, where git's default
+  # osxkeychain helper blocks indefinitely on the locked ci-build keychain that
+  # a prior release left as the default — the WAL-99 "Keychain Not Found" hang.
+  git config --global credential.helper ""
+
   # Set up authenticated remote using GitHub token
   if [ -n "$PLUGIN_GITHUB_TOKEN" ]; then
     local repo="${CI_REPO:?CI_REPO not set}"

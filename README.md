@@ -290,7 +290,7 @@ The bump commit includes `[skip ci]` to prevent infinite pipeline loops.
 | `release-go-binary` | validate-commits → lint → unit-test → [acceptance-test] → release (cross-compile + GPG) | Go binaries, Terraform providers |
 | `release-docker` | validate-commits → lint → test → release → docker-build → [deploy] | Docker projects |
 | `release-terraform` | validate-commits → tf-validate → tflint → trivy → [checkov] → [pytest] → [tf-test] → [tofu-validate] → [docs-check] → release | Terraform modules |
-| `release-macos-app` | validate-commits → version → test → build-sign → package → notarize-staple → release | Swift/macOS apps (darwin runner) |
+| `release-macos-app` | validate-commits → version → test → build-sign → package → notarize-staple → release → restore-keychain (always) | Swift/macOS apps (darwin runner) |
 | `build-macos-app` | build-test (every push + PR) | macOS Swift build/test GATE (darwin runner) |
 | `release-static-site` | build-push → deploy → purge-cache | Marketing/product/hub sites |
 
@@ -358,7 +358,8 @@ The bump commit includes `[skip ci]` to prevent infinite pipeline loops.
 | `notary_team_id` | `team_id` | notarytool team, if it differs from `team_id` |
 | `export_options` | `Scripts/ExportOptions.plist` | `-exportOptionsPlist` path |
 | `dmg_script` | `Scripts/create-dmg.sh` | Script that builds the `.dmg` |
-| `keychain_setup` | `Scripts/setup-keychain-ci.sh` | Sourced to unlock the signing keychain |
+| `keychain_setup` | `Scripts/setup-keychain-ci.sh` | Sourced to unlock the signing keychain (snapshots the original default keychain + search list for the restore step — WAL-101) |
+| `keychain_restore` | `Scripts/restore-keychain-ci.sh` | Sourced by the final `restore-keychain` step (runs on success AND failure) to reset the host default keychain + search list (WAL-101) |
 | `test_destination` | `platform=macOS` | `xcodebuild -destination` value |
 
 **build-macos-app:** (per-push/PR build+test gate — no signing/release)
