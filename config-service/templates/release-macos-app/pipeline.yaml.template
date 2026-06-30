@@ -106,6 +106,12 @@ steps:
         . {{or .keychain_setup "Scripts/setup-keychain-ci.sh"}}
         rm -rf build/
         CLEAN_VERSION="${VERSION#v}"
+        # Force manual Developer ID signing for the archive. The runner has the
+        # "Developer ID Application" cert in its keychain, but the projects
+        # default to automatic signing, which makes xcodebuild demand a "Mac
+        # Development" cert + a logged-in Apple account (absent on CI) and fail
+        # with "No Account for Team". Manual + Developer ID matches the
+        # developer-id export method below and needs no provisioning profile.
         xcodebuild archive \
           -project "{{.project}}" \
           -scheme "{{.scheme}}" \
@@ -113,9 +119,11 @@ steps:
           -archivePath "build/{{.artifact_base}}.xcarchive" \
           -skipMacroValidation \
           -skipPackagePluginValidation \
-          -allowProvisioningUpdates \
           MARKETING_VERSION="$CLEAN_VERSION" \
           CURRENT_PROJECT_VERSION="$CI_PIPELINE_NUMBER" \
+          CODE_SIGN_STYLE=Manual \
+          CODE_SIGN_IDENTITY="Developer ID Application" \
+          PROVISIONING_PROFILE_SPECIFIER="" \
           DEVELOPMENT_TEAM="{{.team_id}}"
         xcodebuild -exportArchive \
           -archivePath "build/{{.artifact_base}}.xcarchive" \
