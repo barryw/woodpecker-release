@@ -291,6 +291,7 @@ The bump commit includes `[skip ci]` to prevent infinite pipeline loops.
 | `release-docker` | validate-commits → lint → test → release → docker-build → [deploy] | Docker projects |
 | `release-terraform` | validate-commits → tf-validate → tflint → trivy → [checkov] → [pytest] → [tf-test] → [tofu-validate] → [docs-check] → release | Terraform modules |
 | `release-macos-app` | validate-commits → version → test → build-sign → package → notarize-staple → release | Swift/macOS apps (darwin runner) |
+| `build-macos-app` | build-test (every push + PR) | macOS Swift build/test GATE (darwin runner) |
 | `release-static-site` | build-push → deploy → purge-cache | Marketing/product/hub sites |
 
 ### Template Parameters
@@ -359,6 +360,19 @@ The bump commit includes `[skip ci]` to prevent infinite pipeline loops.
 | `dmg_script` | `Scripts/create-dmg.sh` | Script that builds the `.dmg` |
 | `keychain_setup` | `Scripts/setup-keychain-ci.sh` | Sourced to unlock the signing keychain |
 | `test_destination` | `platform=macOS` | `xcodebuild -destination` value |
+
+**build-macos-app:** (per-push/PR build+test gate — no signing/release)
+| Parameter | Default | Description |
+|---|---|---|
+| `project` | — | `.xcodeproj` (or pass an `.xcworkspace` path) |
+| `scheme` | — | Xcode scheme to build/test |
+| `test_destination` | `platform=macOS` | `xcodebuild -destination` value |
+| `configuration` | `Debug` | `xcodebuild -configuration` value |
+
+> Resolves private SwiftPM deps (e.g. PixelCanvasKit) via a workspace-local
+> `insteadOf` token rewrite (`github_token` secret, contents:read). Pair it with
+> `release-macos-app` in a repo's `templates:` list so every push/PR is gated
+> while signed releases stay on the version-bump path.
 
 **release-static-site:**
 | Parameter | Default | Description |
