@@ -16,7 +16,7 @@ when:
     branch: main
     path:
       include:
-        - website/**
+        - {{or .website_path "website/**"}}
         - deploy/**
 
 labels:

@@ -160,6 +160,7 @@ data:
   k8s_namespace: novus     # defaults to `site`
   # optional:
   # cloudflare_zone: cloudflare_zone_id   # name of the zone-id secret
+  # website_path: website/**             # trigger glob for site content (deploy/** always included)
   # deploy_path: deploy/                  # kustomize dir (kubectl apply -k)
   # website_context: website             # kaniko build context
   # dockerfile: website/Dockerfile
@@ -307,6 +308,7 @@ The bump commit includes `[skip ci]` to prevent infinite pipeline loops.
 | `site` | — | Image/namespace/deployment stem |
 | `k8s_namespace` | `site` | Kubernetes namespace |
 | `cloudflare_zone` | `cloudflare_zone_id` | Name of the Woodpecker secret holding the zone id |
+| `website_path` | `website/**` | Trigger `path.include` glob for site content (`deploy/**` is always included) |
 | `deploy_path` | `deploy/` | Kustomize dir for `kubectl apply -k` |
 | `website_context` | `website` | kaniko build context |
 | `dockerfile` | `website/Dockerfile` | Dockerfile path |
