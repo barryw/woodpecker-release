@@ -8,9 +8,24 @@ Two components:
 
 ## Onboarding a New Repo
 
-### Step 1: Add `cog.toml`
+### Step 1: Add `cog.toml` + commit-msg hook
 
-Copy this to the repo root:
+The canonical, copy-in `cog.toml` for every repo lives in this repo at
+[`onboarding/cog.toml`](onboarding/cog.toml). Copy it to the repo root and set
+the one repo-specific value (`[changelog].repository`):
+
+```bash
+cp /path/to/woodpecker-release/onboarding/cog.toml ./cog.toml
+# edit cog.toml: set repository = "<this-repo-name>"
+cog install-hook --all   # installs the commit-msg `cog verify` hook
+```
+
+`cog install-hook --all` writes the commit-msg hook from the `[git_hooks]`
+block so only conventional commits can land. A standalone copy of that hook is
+also provided at [`onboarding/commit-msg`](onboarding/commit-msg) for repos that
+install hooks by hand.
+
+For reference, the canonical `cog.toml`:
 
 ```toml
 from_latest_tag = true
@@ -27,18 +42,21 @@ post_bump_hooks = []
 path = "CHANGELOG.md"
 template = "remote"
 remote = "github.com"
-repository = "YOUR_REPO_NAME"
 owner = "barryw"
+repository = "CHANGEME"   # set to this repo's name
 
 [commit_types]
 feat = { changelog_title = "Features" }
 fix = { changelog_title = "Bug Fixes" }
 docs = { changelog_title = "Documentation" }
 refactor = { changelog_title = "Refactoring" }
-test = { changelog_title = "Tests" }
-chore = { changelog_title = "Miscellaneous" }
 perf = { changelog_title = "Performance" }
+test = { changelog_title = "Tests" }
+build = { changelog_title = "Build" }
 ci = { changelog_title = "CI/CD" }
+style = { changelog_title = "Style" }
+chore = { changelog_title = "Miscellaneous" }
+revert = { changelog_title = "Reverts" }
 
 [git_hooks.commit-msg]
 script = """#!/bin/sh
@@ -113,6 +131,43 @@ data:
   docs_check: true
 ```
 
+**For a macOS / Swift app** (Xcode test + archive, Developer ID sign, notarize + staple, .dmg/.zip, release):
+```yaml
+template: release-macos-app
+data:
+  app_name: "Miggy Draw"
+  scheme: "Miggy Draw"
+  project: "RetroDraw.xcodeproj"
+  team_id: "74E8LUBSW9"
+  signing_identity: "Developer ID Application: Barry Walker (74E8LUBSW9)"
+  artifact_base: "MiggyDraw"
+  # optional:
+  # notary_team_id: "Z4M6ST45N5"   # if the notary team differs from team_id
+  # export_options: "Scripts/ExportOptions.plist"
+  # dmg_script: "Scripts/create-dmg.sh"
+  # keychain_setup: "Scripts/setup-keychain-ci.sh"
+  # test_destination: "platform=macOS"
+```
+> Runs on the self-hosted `darwin/arm64` runner. The runner must have Xcode,
+> `cog`, `gh`, and `jq` installed, plus the `Scripts/` helpers referenced above
+> (export-options plist, create-dmg, keychain setup) in the repo.
+
+**For a static / marketing site** (kaniko → GHCR → k8s rollout → Cloudflare purge):
+```yaml
+template: release-static-site
+data:
+  site: novuslang          # image/namespace/deployment stem
+  k8s_namespace: novus     # defaults to `site`
+  # optional:
+  # cloudflare_zone: cloudflare_zone_id   # name of the zone-id secret
+  # deploy_path: deploy/                  # kustomize dir (kubectl apply -k)
+  # website_context: website             # kaniko build context
+  # dockerfile: website/Dockerfile
+  # image_name: novuslang-website        # defaults to <site>-website
+  # deployment_name: novuslang-website   # defaults to <site>-website
+  # container_name: website
+```
+
 **For a simple library** (just validate commits + release, no build):
 ```yaml
 template: release-tag-only
@@ -131,6 +186,10 @@ The repo needs these secrets in Woodpecker (Settings → Secrets):
 | `github_token` | Yes | Git push, GitHub Release creation |
 | `gpg_private_key` | Only if `gpg_sign: true` | Signing checksums |
 | `gpg_fingerprint` | Only if `gpg_sign: true` | GPG key ID |
+| `ci_keychain_password` | `release-macos-app` | Unlock signing keychain on the runner |
+| `apple_id` / `apple_id_password` | `release-macos-app` | notarytool credentials |
+| `ghcr_username` / `ghcr_token` | `release-static-site` | Push site image to GHCR |
+| `cloudflare_api_token` + zone-id secret | `release-static-site` | Purge Cloudflare cache |
 
 ### Step 6: Commit and push
 
@@ -172,6 +231,8 @@ The bump commit includes `[skip ci]` to prevent infinite pipeline loops.
 | `release-go-binary` | validate-commits → lint → unit-test → [acceptance-test] → release (cross-compile + GPG) | Go binaries, Terraform providers |
 | `release-docker` | validate-commits → lint → test → release → docker-build → [deploy] | Docker projects |
 | `release-terraform` | validate-commits → tf-validate → tflint → trivy → [checkov] → [pytest] → [tf-test] → [tofu-validate] → [docs-check] → release | Terraform modules |
+| `release-macos-app` | validate-commits → version → test → build-sign → package → notarize-staple → release | Swift/macOS apps (darwin runner) |
+| `release-static-site` | build-push → deploy → purge-cache | Marketing/product/hub sites |
 
 ### Template Parameters
 
@@ -224,6 +285,34 @@ The bump commit includes `[skip ci]` to prevent infinite pipeline loops.
 | `k8s_namespace` | `default` | Kubernetes namespace |
 | `k8s_deployment` | — | Kubernetes deployment name |
 | `k8s_container` | image_name | Container name in the deployment |
+
+**release-macos-app:**
+| Parameter | Default | Description |
+|---|---|---|
+| `app_name` | — | Display name; the built `<app_name>.app` and Release title |
+| `scheme` | — | Xcode scheme to test/archive |
+| `project` | — | `.xcodeproj` (or pass an `.xcworkspace` path) |
+| `team_id` | — | Developer ID team for signing |
+| `signing_identity` | — | `Developer ID Application: …` identity |
+| `artifact_base` | — | Base name for `<base>-<version>-macos.dmg`/`.zip` |
+| `notary_team_id` | `team_id` | notarytool team, if it differs from `team_id` |
+| `export_options` | `Scripts/ExportOptions.plist` | `-exportOptionsPlist` path |
+| `dmg_script` | `Scripts/create-dmg.sh` | Script that builds the `.dmg` |
+| `keychain_setup` | `Scripts/setup-keychain-ci.sh` | Sourced to unlock the signing keychain |
+| `test_destination` | `platform=macOS` | `xcodebuild -destination` value |
+
+**release-static-site:**
+| Parameter | Default | Description |
+|---|---|---|
+| `site` | — | Image/namespace/deployment stem |
+| `k8s_namespace` | `site` | Kubernetes namespace |
+| `cloudflare_zone` | `cloudflare_zone_id` | Name of the Woodpecker secret holding the zone id |
+| `deploy_path` | `deploy/` | Kustomize dir for `kubectl apply -k` |
+| `website_context` | `website` | kaniko build context |
+| `dockerfile` | `website/Dockerfile` | Dockerfile path |
+| `image_name` | `<site>-website` | GHCR image name (under `ghcr.io/barryw/`) |
+| `deployment_name` | `<site>-website` | k8s deployment name |
+| `container_name` | `website` | Container name in the deployment |
 
 ## Updating Templates
 

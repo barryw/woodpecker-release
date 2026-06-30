@@ -1,0 +1,201 @@
+# release-macos-app — Walker Heavy Industries house template.
+#
+# Xcode test + archive, Developer ID sign, notarytool notarize + staple,
+# package .dmg (+ .zip), cog version bump, and a PUBLISHED GitHub Release with
+# the signed/notarized artifacts attached. Serves the Swift/macOS apps:
+# VICE Mac, Miggy Draw (RetroDraw), FamiForge.
+#
+# Runs on the self-hosted darwin/arm64 runner. The Woodpecker local backend
+# executes commands on the host, so `image:` is informational — Xcode, cog, gh,
+# and jq must be installed on the runner.
+#
+# Ordering mirrors the house pattern (version first, build/notarize, then
+# attach): if there is no new conventional-commit version, every later step is a
+# no-op via the VERSION=NONE guard — same idiom as release-docker.
+#
+# Required secrets: github_token, ci_keychain_password, apple_id,
+#                   apple_id_password.
+# Parameters (data:) — see README "release-macos-app".
+
+when:
+  - event: push
+    branch: main
+
+labels:
+  platform: darwin/arm64
+
+clone:
+  git:
+    image: woodpeckerci/plugin-git
+    settings:
+      tags: true
+      depth: 0
+
+steps:
+  - name: validate-commits
+    image: ghcr.io/cocogitto/cog:6.2.0
+    commands:
+      - git fetch --tags origin 2>/dev/null || true
+      - cog check --from-latest-tag 2>/dev/null || cog check 2>/dev/null || echo "Commit validation skipped (no tags yet)"
+
+  - name: version
+    image: bash
+    environment:
+      GH_TOKEN:
+        from_secret: github_token
+    commands:
+      - |
+        set -e
+        git fetch --tags origin 2>/dev/null || true
+        git config user.name "Woodpecker CI"
+        git config user.email "ci@barrywalker.io"
+        git remote set-url origin "https://x-access-token:$GH_TOKEN@github.com/$CI_REPO.git"
+        echo "Bumping version with cog..."
+        BUMP_OUT=$(cog bump --auto --skip-ci 2>&1) || true
+        echo "$BUMP_OUT"
+        if echo "$BUMP_OUT" | grep -qiE "no conventional commits|no version bump|nothing to bump|required a bump|tag already exists"; then
+          echo "No new version — nothing to release."
+          echo "NONE" > .ci-version
+        else
+          VERSION=$(git describe --tags --abbrev=0)
+          echo "New version: $VERSION"
+          git push origin main
+          git push origin "$VERSION"
+          echo "$VERSION" > .ci-version
+        fi
+    depends_on:
+      - validate-commits
+
+  - name: test
+    image: bash
+    environment:
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+    commands:
+      - |
+        set -e
+        VERSION=$(cat .ci-version 2>/dev/null || echo NONE)
+        test "$VERSION" != "NONE" || { echo "No new version, skipping tests"; exit 0; }
+        xcodebuild test \
+          -project "{{.project}}" \
+          -scheme "{{.scheme}}" \
+          -destination '{{or .test_destination "platform=macOS"}}' \
+          -resultBundlePath test-results.xcresult \
+          -skipMacroValidation \
+          -skipPackagePluginValidation \
+          CODE_SIGNING_ALLOWED=NO
+    depends_on:
+      - version
+
+  - name: build-sign
+    image: bash
+    environment:
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+      DEVELOPMENT_TEAM: "{{.team_id}}"
+      CI_KEYCHAIN_PASSWORD:
+        from_secret: ci_keychain_password
+    commands:
+      - |
+        set -e
+        VERSION=$(cat .ci-version 2>/dev/null || echo NONE)
+        test "$VERSION" != "NONE" || { echo "No new version, skipping build"; exit 0; }
+        . {{or .keychain_setup "Scripts/setup-keychain-ci.sh"}}
+        rm -rf build/
+        CLEAN_VERSION="${VERSION#v}"
+        xcodebuild archive \
+          -project "{{.project}}" \
+          -scheme "{{.scheme}}" \
+          -configuration Release \
+          -archivePath "build/{{.artifact_base}}.xcarchive" \
+          -skipMacroValidation \
+          -skipPackagePluginValidation \
+          -allowProvisioningUpdates \
+          MARKETING_VERSION="$CLEAN_VERSION" \
+          CURRENT_PROJECT_VERSION="$CI_PIPELINE_NUMBER" \
+          DEVELOPMENT_TEAM="{{.team_id}}"
+        xcodebuild -exportArchive \
+          -archivePath "build/{{.artifact_base}}.xcarchive" \
+          -exportPath build/export \
+          -exportOptionsPlist {{or .export_options "Scripts/ExportOptions.plist"}}
+        codesign --verify --deep --strict --verbose=2 "build/export/{{.app_name}}.app"
+    depends_on:
+      - test
+
+  - name: package
+    image: bash
+    environment:
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+      CI_KEYCHAIN_PASSWORD:
+        from_secret: ci_keychain_password
+    commands:
+      - |
+        set -e
+        VERSION=$(cat .ci-version 2>/dev/null || echo NONE)
+        test "$VERSION" != "NONE" || { echo "No new version, skipping packaging"; exit 0; }
+        . {{or .keychain_setup "Scripts/setup-keychain-ci.sh"}}
+        CLEAN_VERSION="${VERSION#v}"
+        DMG="build/{{.artifact_base}}-$CLEAN_VERSION-macos.dmg"
+        ZIP="build/{{.artifact_base}}-$CLEAN_VERSION-macos.zip"
+        {{or .dmg_script "Scripts/create-dmg.sh"}} "build/export/{{.app_name}}.app" "$DMG" "$CLEAN_VERSION"
+        ditto -c -k --keepParent "build/export/{{.app_name}}.app" "$ZIP"
+        codesign --force --sign "{{.signing_identity}}" --timestamp "$DMG"
+        codesign --verify --verbose=2 "$DMG"
+        ls -la build/*.dmg build/*.zip
+    depends_on:
+      - build-sign
+
+  - name: notarize-staple
+    image: bash
+    environment:
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+      APPLE_ID:
+        from_secret: apple_id
+      APPLE_ID_PASSWORD:
+        from_secret: apple_id_password
+      APPLE_TEAM_ID: "{{or .notary_team_id .team_id}}"
+    commands:
+      - |
+        set -e
+        VERSION=$(cat .ci-version 2>/dev/null || echo NONE)
+        test "$VERSION" != "NONE" || { echo "No new version, skipping notarization"; exit 0; }
+        CLEAN_VERSION="${VERSION#v}"
+        DMG="build/{{.artifact_base}}-$CLEAN_VERSION-macos.dmg"
+        ZIP="build/{{.artifact_base}}-$CLEAN_VERSION-macos.zip"
+        xcrun notarytool store-credentials "whi-notarize" \
+          --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_ID_PASSWORD"
+        echo "Notarizing DMG..."
+        xcrun notarytool submit "$DMG" --keychain-profile "whi-notarize" --wait --timeout 30m
+        echo "Notarizing ZIP..."
+        xcrun notarytool submit "$ZIP" --keychain-profile "whi-notarize" --wait --timeout 30m
+        xcrun stapler staple "$DMG"
+        xcrun stapler validate "$DMG"
+        spctl --assess --type open --context context:primary-signature --verbose=2 "$DMG" || true
+    depends_on:
+      - package
+
+  - name: release
+    image: bash
+    environment:
+      GH_TOKEN:
+        from_secret: github_token
+    commands:
+      - |
+        set -e
+        VERSION=$(cat .ci-version 2>/dev/null || echo NONE)
+        test "$VERSION" != "NONE" || { echo "No new version, skipping release"; exit 0; }
+        CLEAN_VERSION="${VERSION#v}"
+        DMG="build/{{.artifact_base}}-$CLEAN_VERSION-macos.dmg"
+        ZIP="build/{{.artifact_base}}-$CLEAN_VERSION-macos.zip"
+        cog changelog --at "$VERSION" > /tmp/release-notes.md 2>/dev/null || echo "{{.app_name}} $VERSION" > /tmp/release-notes.md
+        test -s /tmp/release-notes.md || echo "{{.app_name}} $VERSION" > /tmp/release-notes.md
+        gh release create "$VERSION" \
+          --repo "$CI_REPO" \
+          --title "{{.app_name}} $CLEAN_VERSION" \
+          --notes-file /tmp/release-notes.md \
+          "$DMG" "$ZIP" || gh release upload "$VERSION" "$DMG" "$ZIP" --repo "$CI_REPO" --clobber
+        echo "Published release $VERSION with .dmg + .zip"
+    depends_on:
+      - notarize-staple

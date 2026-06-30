@@ -1,0 +1,65 @@
+# Canonical Cocogitto configuration — Walker Heavy Industries house standard.
+# https://docs.cocogitto.io/
+#
+# This is the copy-in source for EVERY repo in the suite (Build & Release
+# Standard / ADR 0003). Adopt it verbatim except for the two clearly-marked
+# repo-specific values in [changelog] (owner/repository) and any per-stack
+# *_bump_hooks a repo genuinely needs (e.g. stamping a version into .csproj or
+# Info.plist — see the commented examples below).
+#
+# After copying:
+#   1. cog install-hook --all      # installs the commit-msg hook below
+#   2. Reconcile existing tags to vX.Y.Z (see woodpecker-release README,
+#      "Handle existing version tags") so cog continues instead of resetting.
+
+# Start versioning from the latest tag; ignore pre-convention history.
+from_latest_tag = true
+ignore_merge_commits = true
+# Only main produces releases.
+branch_whitelist = ["main"]
+# House tag scheme: v-prefixed semver. No per-repo prefixes (e.g. vice-mcp-*).
+tag_prefix = "v"
+# The CI bump commit carries this marker so the release pipeline does not loop.
+skip_ci = "[skip ci]"
+skip_untracked = false
+
+# Per-stack version-stamping hooks. Most repos need NONE (the build reads the
+# version from the tag / `cog get-version`). Add only if your build embeds the
+# version in a source file. Examples:
+#   .NET   : pre_bump_hooks = ["sed -i 's|<Version>.*</Version>|<Version>{{version}}</Version>|' src/App.csproj", "git add src/App.csproj"]
+#   Xcode  : post_bump_hooks = ["Scripts/update-version.sh {{version}}"]
+pre_bump_hooks = []
+post_bump_hooks = []
+
+[changelog]
+path = "CHANGELOG.md"
+# Remote template renders commit/PR/author links in the generated notes.
+template = "remote"
+remote = "github.com"
+owner = "barryw"
+# >>> REPO-SPECIFIC: set to this repo's name (the part after barryw/). <<<
+repository = "CHANGEME"
+
+# House conventional-commit type set. Keep identical across repos so changelog
+# sections line up everywhere.
+[commit_types]
+feat = { changelog_title = "Features" }
+fix = { changelog_title = "Bug Fixes" }
+docs = { changelog_title = "Documentation" }
+refactor = { changelog_title = "Refactoring" }
+perf = { changelog_title = "Performance" }
+test = { changelog_title = "Tests" }
+build = { changelog_title = "Build" }
+ci = { changelog_title = "CI/CD" }
+style = { changelog_title = "Style" }
+chore = { changelog_title = "Miscellaneous" }
+revert = { changelog_title = "Reverts" }
+
+# Enforce conventional commits locally. `cog install-hook --all` writes this to
+# .git/hooks/commit-msg. The same script is provided standalone at
+# onboarding/commit-msg for repos that install hooks by hand or via CI.
+[git_hooks.commit-msg]
+script = """#!/bin/sh
+set -e
+cog verify --file $1
+"""
