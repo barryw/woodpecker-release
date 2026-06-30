@@ -52,6 +52,12 @@ steps:
         git fetch --tags origin 2>/dev/null || true
         git config user.name "Woodpecker CI"
         git config user.email "ci@barrywalker.io"
+        # Disable any credential helper. The runner is a macOS host whose default
+        # keychain gets switched to the locked ci-build keychain by a prior run's
+        # setup-keychain-ci.sh and never restored, so git's osxkeychain helper
+        # blocks indefinitely trying to store the pushed credential. The token is
+        # already in the remote URL, so no helper is needed for auth.
+        git config --global credential.helper ""
         git remote set-url origin "https://x-access-token:$GH_TOKEN@github.com/$CI_REPO.git"
         echo "Bumping version with cog..."
         BUMP_OUT=$(cog bump --auto --skip-ci 2>&1) || true
