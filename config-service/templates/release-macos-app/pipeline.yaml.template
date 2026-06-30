@@ -251,3 +251,19 @@ steps:
         echo "Published release $VERSION with .dmg + .zip"
     depends_on:
       - notarize-staple
+
+  - name: restore-keychain
+    image: bash
+    # WAL-101: build-sign/package source setup-keychain-ci.sh, which switches the
+    # host's *default* keychain + user search list to the locked ci-build keychain
+    # and never restores them. Left that way, the next CLI tool that writes to the
+    # default keychain (git's osxkeychain helper, etc.) trips a "Keychain Not Found"
+    # GUI dialog on the runner. This step puts the original default + search list
+    # back. It MUST run on failure too, so an aborted release never strands the
+    # host on the locked keychain — hence the success/failure `when`.
+    commands:
+      - . {{or .keychain_restore "Scripts/restore-keychain-ci.sh"}}
+    when:
+      - status: [success, failure]
+    depends_on:
+      - release
