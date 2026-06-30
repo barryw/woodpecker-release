@@ -32,6 +32,26 @@ echo "  Repo:    ${CI_REPO:-unknown}"
 echo "  Branch:  ${PLUGIN_GIT_BRANCH:-main}"
 echo "============================================"
 
+# --- Step 0: Acquire GitHub token (WAL-70) ---
+# Prefer a freshly-minted, down-scoped GitHub App installation token over the
+# shared admin PAT. When GH_APP_* credentials are present (wired as Woodpecker
+# secrets for repos opted in via the template's `mint_token` flag) we mint a
+# ~1h token scoped to the product-ci profile (contents=write,metadata=read).
+# When they are absent the static PLUGIN_GITHUB_TOKEN PAT is used unchanged, so
+# this is fully non-breaking until the PAT is retired in WAL-69 step 4.
+TOKEN_PROFILE="${PLUGIN_TOKEN_PROFILE:-product-ci}"
+if [ -n "${GH_APP_ID:-}" ] && [ -n "${GH_APP_INSTALLATION_ID:-}" ] && [ -n "${GH_APP_PRIVATE_KEY:-}" ]; then
+  echo "Auth: minting GitHub App installation token (profile: ${TOKEN_PROFILE})..."
+  if minted_token="$("$SCRIPT_DIR/mint-installation-token.sh" --profile "$TOKEN_PROFILE")"; then
+    PLUGIN_GITHUB_TOKEN="$minted_token"
+    echo "Auth: minted App installation token (short-lived, ~1h)."
+  else
+    echo "ERROR: token minting failed; falling back to PLUGIN_GITHUB_TOKEN PAT." >&2
+  fi
+else
+  echo "Auth: using static PLUGIN_GITHUB_TOKEN (no App credentials provided)."
+fi
+
 # --- Step 1: Git setup (all modes) ---
 # Export GH_TOKEN for the gh CLI (it reads this env var for auth)
 export GH_TOKEN="${PLUGIN_GITHUB_TOKEN:-}"

@@ -26,7 +26,13 @@ steps:
       PLUGIN_GPG_KEY:
         from_secret: gpg_private_key
       PLUGIN_GPG_FINGERPRINT:
-        from_secret: gpg_fingerprint{{end}}
+        from_secret: gpg_fingerprint{{end}}{{if .mint_token}}
+      GH_APP_ID:
+        from_secret: gh_app_id
+      GH_APP_INSTALLATION_ID:
+        from_secret: gh_app_installation_id
+      GH_APP_PRIVATE_KEY:
+        from_secret: gh_app_private_key{{end}}
       PLUGIN_MODE: release-go
       PLUGIN_GIT_EMAIL: ci@barrywalker.io
       PLUGIN_GO_PLATFORMS: {{or .go_platforms "linux/amd64,linux/arm64,darwin/amd64,darwin/arm64,windows/amd64"}}

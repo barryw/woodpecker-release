@@ -208,13 +208,25 @@ The repo needs these secrets in Woodpecker (Settings → Secrets):
 
 | Secret | Required | Used for |
 |---|---|---|
-| `github_token` | Yes | Git push, GitHub Release creation |
+| `github_token` | Yes (unless `mint_token`) | Git push, GitHub Release creation |
+| `gh_app_id` / `gh_app_installation_id` / `gh_app_private_key` | Only if `mint_token: true` | Mint a short-lived GitHub App installation token in place of the PAT (org-level secrets, WAL-70) |
 | `gpg_private_key` | Only if `gpg_sign: true` | Signing checksums |
 | `gpg_fingerprint` | Only if `gpg_sign: true` | GPG key ID |
 | `ci_keychain_password` | `release-macos-app` | Unlock signing keychain on the runner |
 | `apple_id` / `apple_id_password` | `release-macos-app` | notarytool credentials |
 | `ghcr_username` / `ghcr_token` | `release-static-site` | Push site image to GHCR |
 | `cloudflare_api_token` + zone-id secret | `release-static-site` | Purge Cloudflare cache |
+
+#### Minted App tokens (`mint_token: true`)
+
+By default the release step authenticates with the shared `github_token` PAT.
+Set `mint_token: true` in the template `data:` to instead mint a short-lived,
+down-scoped **GitHub App installation token** (profile `product-ci`,
+`contents=write,metadata=read`) at the start of the release step. The plugin
+vendors `mint-installation-token.sh` and mints on demand — pipelines are
+short-lived, so the ~1h token is a natural fit with no rotation. This needs the
+org-level `gh_app_id` / `gh_app_installation_id` / `gh_app_private_key` secrets.
+The PAT remains wired as a fallback until it is retired (WAL-69 step 4).
 
 ### Step 6: Commit and push
 

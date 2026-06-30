@@ -11,6 +11,7 @@ RUN apk add --no-cache \
     gnupg \
     jq \
     curl \
+    openssl \
     zip \
     openssh-client
 
@@ -30,7 +31,11 @@ RUN curl -sL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${G
 
 COPY lib/ /plugin/lib/
 COPY entrypoint.sh /plugin/entrypoint.sh
-RUN chmod +x /plugin/entrypoint.sh /plugin/lib/*.sh
+# WAL-70: vendor the GitHub App token minter so release steps can mint a
+# short-lived, down-scoped installation token instead of carrying the shared PAT.
+COPY mint-installation-token.sh /plugin/mint-installation-token.sh
+COPY profiles.env /plugin/profiles.env
+RUN chmod +x /plugin/entrypoint.sh /plugin/lib/*.sh /plugin/mint-installation-token.sh
 
 ENTRYPOINT ["/plugin/entrypoint.sh"]
 
