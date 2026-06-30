@@ -1,0 +1,65 @@
+# release-static-site — Walker Heavy Industries house template.
+#
+# kaniko build -> GHCR -> kubectl apply/set-image/rollout -> Cloudflare purge.
+# This is the deploy pattern Novus (novuslang.com) and RetroDraw (miggydraw.com)
+# already share, parameterized so every product/marketing site and the house
+# hub deploy identically. Sites are NOT versioned releases — they ship on
+# website/** changes to main and are tagged by pipeline number.
+#
+# Required secrets: ghcr_username, ghcr_token, cloudflare_api_token, and the
+#                   zone secret named by .cloudflare_zone (default
+#                   cloudflare_zone_id).
+# Parameters (data:) — see README "release-static-site".
+
+when:
+  - event: push
+    branch: main
+    path:
+      include:
+        - website/**
+        - deploy/**
+
+labels:
+  platform: linux/amd64
+
+steps:
+  - name: build-push
+    image: gcr.io/kaniko-project/executor:debug
+    environment:
+      GHCR_USERNAME:
+        from_secret: ghcr_username
+      GHCR_TOKEN:
+        from_secret: ghcr_token
+    commands:
+      - mkdir -p /kaniko/.docker
+      - echo "{\"auths\":{\"ghcr.io\":{\"username\":\"$GHCR_USERNAME\",\"password\":\"$GHCR_TOKEN\"}}}" > /kaniko/.docker/config.json
+      - /kaniko/executor --context=$CI_WORKSPACE/{{or .website_context "website"}} --dockerfile=$CI_WORKSPACE/{{or .dockerfile "website/Dockerfile"}} --destination=ghcr.io/barryw/{{or .image_name (printf "%s-website" .site)}}:build-$CI_PIPELINE_NUMBER --destination=ghcr.io/barryw/{{or .image_name (printf "%s-website" .site)}}:latest
+
+  - name: deploy
+    image: bitnami/kubectl:latest
+    commands:
+      - kubectl get namespace {{or .k8s_namespace .site}} || kubectl create namespace {{or .k8s_namespace .site}}
+      - kubectl get secret ghcr-secret -n {{or .k8s_namespace .site}} || kubectl get secret ghcr-secret -n default -o json | sed 's/"namespace":"default"/"namespace":"{{or .k8s_namespace .site}}"/' | kubectl apply -f -
+      - kubectl apply -k {{or .deploy_path "deploy/"}}
+      - kubectl set image deployment/{{or .deployment_name (printf "%s-website" .site)}} {{or .container_name "website"}}=ghcr.io/barryw/{{or .image_name (printf "%s-website" .site)}}:build-$CI_PIPELINE_NUMBER -n {{or .k8s_namespace .site}}
+      - kubectl rollout status deployment/{{or .deployment_name (printf "%s-website" .site)}} -n {{or .k8s_namespace .site}} --timeout=120s
+      - kubectl get pods -n {{or .k8s_namespace .site}}
+    depends_on:
+      - build-push
+
+  - name: purge-cache
+    image: curlimages/curl:latest
+    environment:
+      CLOUDFLARE_ZONE_ID:
+        from_secret: {{or .cloudflare_zone "cloudflare_zone_id"}}
+      CLOUDFLARE_API_TOKEN:
+        from_secret: cloudflare_api_token
+    commands:
+      - |
+        curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/purge_cache" \
+          -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+          -H "Content-Type: application/json" \
+          --data '{"purge_everything":true}'
+      - echo "Cloudflare cache purged for {{.site}}"
+    depends_on:
+      - deploy

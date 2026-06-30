@@ -1,0 +1,12 @@
+#!/bin/sh
+# Walker Heavy Industries house commit-msg hook — enforces conventional commits.
+#
+# Cocogitto writes this automatically from cog.toml's [git_hooks.commit-msg]
+# when you run `cog install-hook --all`. This standalone copy is for repos that
+# install hooks by hand or copy it into .git/hooks/commit-msg directly:
+#
+#   cp onboarding/commit-msg .git/hooks/commit-msg && chmod +x .git/hooks/commit-msg
+#
+# Requires `cog` (cocogitto) on PATH.
+set -e
+cog verify --file $1
