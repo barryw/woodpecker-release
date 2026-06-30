@@ -28,6 +28,15 @@ spec:
               value: /run/secrets/webhook_public_key
             - name: TEMPLATES_PATH
               value: /templates/
+            # Token with read access to PRIVATE repos so the Contents API can
+            # fetch their .woodpecker/woodpecker-template.yaml. Without it,
+            # private repos fall back to raw config and fail to expand.
+            - name: CONFIG_SERVICE_GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: woodpecker-config-service
+                  key: github_token
+                  optional: true
           volumeMounts:
             - name: webhook-key
               mountPath: /run/secrets/webhook_public_key

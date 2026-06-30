@@ -45,7 +45,16 @@ func getTemplateFileFromForge(req woodpeckerRequest, _ []byte) ([]byte, bool) {
 	}
 
 	httpReq.Header.Set("Accept", "application/vnd.github.v3+json")
-	if req.Netrc != nil && req.Netrc.Password != "" {
+	// Auth for the Contents API. PUBLIC repos resolve unauthenticated, but
+	// PRIVATE repos 404 without a credential — which the caller treats as "no
+	// template" and silently falls back to the raw repo config (the symptom:
+	// every private repo using a woodpecker-template.yaml fails with
+	// "Invalid or missing `steps` section"). A dedicated token
+	// (CONFIG_SERVICE_GITHUB_TOKEN), with read access to the private repos,
+	// takes precedence; the per-pipeline netrc is the fallback.
+	if token := lookupEnvOrDefault("CONFIG_SERVICE_GITHUB_TOKEN", ""); token != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+token)
+	} else if req.Netrc != nil && req.Netrc.Password != "" {
 		httpReq.SetBasicAuth(req.Netrc.Login, req.Netrc.Password)
 	}
 
