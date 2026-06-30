@@ -173,27 +173,23 @@ steps:
       APPLE_ID_PASSWORD:
         from_secret: apple_id_password
       APPLE_TEAM_ID: "{{or .notary_team_id .team_id}}"
-      CI_KEYCHAIN_PASSWORD:
-        from_secret: ci_keychain_password
     commands:
       - |
         set -e
         VERSION=$(cat .ci-version 2>/dev/null || echo NONE)
         test "$VERSION" != "NONE" || { echo "No new version, skipping notarization"; exit 0; }
-        # notarytool stores/reads its credential profile in the default keychain.
-        # Source the keychain setup (as build-sign/package do) so HOME and the
-        # default keychain are set; otherwise store-credentials fails with
-        # "A default keychain could not be found".
-        . {{or .keychain_setup "Scripts/setup-keychain-ci.sh"}}
         CLEAN_VERSION=$(echo "$VERSION" | sed 's/^v//')  # sed, not shell brace param-expansion (Woodpecker substitutes brace-dollar refs everywhere, even in comments)
         DMG="build/{{.artifact_base}}-$CLEAN_VERSION-macos.dmg"
         ZIP="build/{{.artifact_base}}-$CLEAN_VERSION-macos.zip"
-        xcrun notarytool store-credentials "whi-notarize" \
-          --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_ID_PASSWORD"
+        # Pass notary credentials inline rather than via `store-credentials` +
+        # `--keychain-profile`. Storing a profile writes to the keychain and the
+        # subsequent read needs interactive ACL approval ("User interaction is
+        # not allowed") that cannot happen on a headless CI runner. Inline creds
+        # talk straight to Apple's notary service and touch no keychain.
         echo "Notarizing DMG..."
-        xcrun notarytool submit "$DMG" --keychain-profile "whi-notarize" --wait --timeout 30m
+        xcrun notarytool submit "$DMG" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_ID_PASSWORD" --wait --timeout 30m
         echo "Notarizing ZIP..."
-        xcrun notarytool submit "$ZIP" --keychain-profile "whi-notarize" --wait --timeout 30m
+        xcrun notarytool submit "$ZIP" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_ID_PASSWORD" --wait --timeout 30m
         xcrun stapler staple "$DMG"
         xcrun stapler validate "$DMG"
         spctl --assess --type open --context context:primary-signature --verbose=2 "$DMG" || true
