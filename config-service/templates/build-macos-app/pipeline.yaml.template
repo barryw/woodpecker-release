@@ -1,0 +1,85 @@
+# build-macos-app — Walker Heavy Industries house template (WAL-85).
+#
+# Per-push / per-pull-request macOS Swift build + test GATE for the Xcode-project
+# apps (FamiForge, Miggy Draw/RetroDraw, VICE Mac). It compiles the scheme and
+# runs its test suite on EVERY push and pull_request — no signing, no
+# notarization, no release, no version bump.
+#
+# Why this exists alongside release-macos-app: that template runs only on push
+# to main and is a no-op (VERSION=NONE guard) whenever there is no
+# conventional-commit version bump, so an ordinary push or a pull request leaves
+# the code completely uncompiled and untested. This template closes that gap and
+# is the verification path that makes migration PRs reviewable — e.g. the WAL-85
+# PixelCanvasKit adoption, where the engineer runs on Linux and cannot compile
+# Swift locally. Land this FIRST, then iterate the migration against a green gate.
+#
+# Runtime model (same as release-macos-app): runs on the self-hosted darwin/arm64
+# LOCAL backend, where Woodpecker execs `image:` as the host command that
+# interprets a step's `commands:`. It must therefore be a binary on the runner's
+# PATH (`bash`) — NOT a container reference. The clone step's plugin-git is the
+# one exception (handled by the backend's clone). Xcode must be installed on the
+# runner and is invoked from the step commands directly.
+#
+# Private SwiftPM dependencies: PixelCanvasKit is a PRIVATE repo, and xcodebuild
+# resolves it by shelling out to git non-interactively. We inject a credential
+# via a WORKSPACE-LOCAL git config (GIT_CONFIG_GLOBAL) + an insteadOf URL rewrite
+# — the proven NovaDraw pattern (WAL-29/35). Never write the shared runner's
+# ~/.gitconfig, and avoid the osxkeychain helper (it blocks on the locked CI
+# keychain). The github_token PAT has contents:read across the org, which is all
+# package resolution needs; this can move to a minted product-ci token later
+# (WAL-70/74) — set mint_token and supply the vendored minter, same idiom as
+# release-macos-app.
+#
+# CODE_SIGNING_ALLOWED=NO keeps the gate cert-free (the build/test runner has no
+# Developer ID requirement for a non-archiving test build).
+#
+# Parameters (data:):
+#   project          required — e.g. "FamiForge.xcodeproj"
+#   scheme           required — e.g. "FamiForge"
+#   test_destination optional — defaults to "platform=macOS"
+#   configuration    optional — defaults to "Debug"
+
+when:
+  # All pushes (every branch) — the release pipeline only fires on main and only
+  # when a version bumps, so this is the only thing that tests feature branches.
+  - event: push
+  # Pull requests — the PR event carries a diff so reviewers get a build status.
+  - event: pull_request
+  # On demand, so the gate can be re-run before merge without a new commit.
+  - event: manual
+
+labels:
+  platform: darwin/arm64
+
+clone:
+  git:
+    image: woodpeckerci/plugin-git
+    settings:
+      tags: true
+
+steps:
+  - name: build-test
+    image: bash
+    environment:
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+      # SwiftPM resolves the private PixelCanvasKit package non-interactively;
+      # give it a credential in a workspace-local git config (never the shared
+      # ~/.gitconfig). Woodpecker masks the secret value in logs.
+      GITHUB_TOKEN:
+        from_secret: github_token
+    commands:
+      - export GIT_CONFIG_GLOBAL="$CI_WORKSPACE/.gitconfig.ci"
+      - git config --global url."https://x-access-token:$GITHUB_TOKEN@github.com/".insteadOf "https://github.com/"
+      - |
+        set -e
+        xcodebuild test \
+          -project "{{.project}}" \
+          -scheme "{{.scheme}}" \
+          -destination '{{or .test_destination "platform=macOS"}}' \
+          -configuration "{{or .configuration "Debug"}}" \
+          -resultBundlePath build-test.xcresult \
+          -clonedSourcePackagesDirPath "$CI_WORKSPACE/.spm-cache" \
+          -skipMacroValidation \
+          -skipPackagePluginValidation \
+          CODE_SIGNING_ALLOWED=NO
