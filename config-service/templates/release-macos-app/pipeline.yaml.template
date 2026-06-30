@@ -16,8 +16,19 @@
 # attach): if there is no new conventional-commit version, every later step is a
 # no-op via the VERSION=NONE guard — same idiom as release-docker.
 #
-# Required secrets: github_token, ci_keychain_password, apple_id,
-#                   apple_id_password.
+# GitHub auth (WAL-73): the steps that touch GitHub (`version` push, `release`
+# create) authenticate with a short-lived GitHub App installation token instead
+# of the shared admin PAT when `mint_token: true` is set. The local backend has
+# no plugin-image, so the minter (bash/openssl/curl/jq — mint-installation-token.sh
+# + its profiles file) is vendored into the checked-out repo's Scripts/ and run
+# straight off the runner; the App key arrives via gh_app_* org secrets, so no
+# pre-existing token is needed to bootstrap. Override `minter_path` to point at a
+# runner-image-vendored copy once one exists. Falls back to `github_token` PAT
+# when `mint_token` is unset.
+#
+# Required secrets: ci_keychain_password, apple_id, apple_id_password, and either
+#                   github_token (PAT) OR gh_app_id + gh_app_installation_id +
+#                   gh_app_private_key (mint_token: true).
 # Parameters (data:) — see README "release-macos-app".
 
 when:
@@ -43,9 +54,16 @@ steps:
 
   - name: version
     image: bash
-    environment:
+    environment:{{if .mint_token}}
+      # WAL-73: mint a short-lived, least-priv App token instead of the shared PAT.
+      GH_APP_ID:
+        from_secret: gh_app_id
+      GH_APP_INSTALLATION_ID:
+        from_secret: gh_app_installation_id
+      GH_APP_PRIVATE_KEY:
+        from_secret: gh_app_private_key{{else}}
       GH_TOKEN:
-        from_secret: github_token
+        from_secret: github_token{{end}}
     commands:
       - |
         set -e
@@ -57,7 +75,12 @@ steps:
         # setup-keychain-ci.sh and never restored, so git's osxkeychain helper
         # blocks indefinitely trying to store the pushed credential. The token is
         # already in the remote URL, so no helper is needed for auth.
-        git config --global credential.helper ""
+        git config --global credential.helper ""{{if .mint_token}}
+        # WAL-73: exchange the WHI GitHub App key for a ~1h contents:write token.
+        # Minter + profiles are vendored into the checked-out repo's Scripts/, so
+        # nothing but openssl/curl/jq (runner deps) and the gh_app_* secrets is
+        # needed — no shared PAT in the auth path.
+        GH_TOKEN=$(PROFILES_FILE="{{or .minter_profiles "Scripts/whi-token-profiles.env"}}" bash {{or .minter_path "Scripts/mint-installation-token.sh"}} --profile {{or .minter_profile "product-ci"}}){{end}}
         git remote set-url origin "https://x-access-token:$GH_TOKEN@github.com/$CI_REPO.git"
         echo "Bumping version with cog..."
         BUMP_OUT=$(cog bump --auto --skip-ci 2>&1) || true
@@ -198,14 +221,23 @@ steps:
 
   - name: release
     image: bash
-    environment:
+    environment:{{if .mint_token}}
+      GH_APP_ID:
+        from_secret: gh_app_id
+      GH_APP_INSTALLATION_ID:
+        from_secret: gh_app_installation_id
+      GH_APP_PRIVATE_KEY:
+        from_secret: gh_app_private_key{{else}}
       GH_TOKEN:
-        from_secret: github_token
+        from_secret: github_token{{end}}
     commands:
       - |
         set -e
         VERSION=$(cat .ci-version 2>/dev/null || echo NONE)
-        test "$VERSION" != "NONE" || { echo "No new version, skipping release"; exit 0; }
+        test "$VERSION" != "NONE" || { echo "No new version, skipping release"; exit 0; }{{if .mint_token}}
+        # WAL-73: mint a fresh ~1h token for the release (the version-step token
+        # may have expired during the build/notarize wait, so re-mint here).
+        GH_TOKEN=$(PROFILES_FILE="{{or .minter_profiles "Scripts/whi-token-profiles.env"}}" bash {{or .minter_path "Scripts/mint-installation-token.sh"}} --profile {{or .minter_profile "product-ci"}}){{end}}
         CLEAN_VERSION=$(echo "$VERSION" | sed 's/^v//')  # sed, not shell brace param-expansion (Woodpecker substitutes brace-dollar refs everywhere, even in comments)
         DMG="build/{{.artifact_base}}-$CLEAN_VERSION-macos.dmg"
         ZIP="build/{{.artifact_base}}-$CLEAN_VERSION-macos.zip"
