@@ -70,6 +70,16 @@ steps:
         from_secret: github_token
     commands:
       - export GIT_CONFIG_GLOBAL="$CI_WORKSPACE/.gitconfig.ci"
+      # Disable any credential helper BEFORE the authenticated fetch. The runner
+      # is a macOS host whose git defaults to the osxkeychain helper; after a
+      # successful SwiftPM package resolution git runs `credential approve` and
+      # the helper tries to STORE "x-access-token" in the login keychain. The
+      # default keychain has been switched to the locked ci-build keychain by a
+      # prior release run's setup-keychain-ci.sh and never restored, so the store
+      # fails and macOS pops a "Keychain Not Found — cannot store x-access-token"
+      # dialog on the host's screen (WAL-99). The token is already in the rewritten
+      # URL below, so no helper is needed for auth. release-macos-app does the same.
+      - git config --global credential.helper ""
       - git config --global url."https://x-access-token:$GITHUB_TOKEN@github.com/".insteadOf "https://github.com/"
       - |
         set -e
