@@ -111,7 +111,7 @@ steps:
         test "$VERSION" != "NONE" || { echo "No new version, skipping build"; exit 0; }
         . {{or .keychain_setup "Scripts/setup-keychain-ci.sh"}}
         rm -rf build/
-        CLEAN_VERSION="${VERSION#v}"
+        CLEAN_VERSION=$(echo "$VERSION" | sed 's/^v//')  # NOT ${VERSION#v}: Woodpecker eats ${...}
         # Force manual Developer ID signing for the archive. The runner has the
         # "Developer ID Application" cert in its keychain, but the projects
         # default to automatic signing, which makes xcodebuild demand a "Mac
@@ -152,7 +152,7 @@ steps:
         VERSION=$(cat .ci-version 2>/dev/null || echo NONE)
         test "$VERSION" != "NONE" || { echo "No new version, skipping packaging"; exit 0; }
         . {{or .keychain_setup "Scripts/setup-keychain-ci.sh"}}
-        CLEAN_VERSION="${VERSION#v}"
+        CLEAN_VERSION=$(echo "$VERSION" | sed 's/^v//')  # NOT ${VERSION#v}: Woodpecker eats ${...}
         DMG="build/{{.artifact_base}}-$CLEAN_VERSION-macos.dmg"
         ZIP="build/{{.artifact_base}}-$CLEAN_VERSION-macos.zip"
         {{or .dmg_script "Scripts/create-dmg.sh"}} "build/export/{{.app_name}}.app" "$DMG" "$CLEAN_VERSION"
@@ -178,7 +178,7 @@ steps:
         set -e
         VERSION=$(cat .ci-version 2>/dev/null || echo NONE)
         test "$VERSION" != "NONE" || { echo "No new version, skipping notarization"; exit 0; }
-        CLEAN_VERSION="${VERSION#v}"
+        CLEAN_VERSION=$(echo "$VERSION" | sed 's/^v//')  # NOT ${VERSION#v}: Woodpecker eats ${...}
         DMG="build/{{.artifact_base}}-$CLEAN_VERSION-macos.dmg"
         ZIP="build/{{.artifact_base}}-$CLEAN_VERSION-macos.zip"
         xcrun notarytool store-credentials "whi-notarize" \
@@ -203,7 +203,7 @@ steps:
         set -e
         VERSION=$(cat .ci-version 2>/dev/null || echo NONE)
         test "$VERSION" != "NONE" || { echo "No new version, skipping release"; exit 0; }
-        CLEAN_VERSION="${VERSION#v}"
+        CLEAN_VERSION=$(echo "$VERSION" | sed 's/^v//')  # NOT ${VERSION#v}: Woodpecker eats ${...}
         DMG="build/{{.artifact_base}}-$CLEAN_VERSION-macos.dmg"
         ZIP="build/{{.artifact_base}}-$CLEAN_VERSION-macos.zip"
         cog changelog --at "$VERSION" > /tmp/release-notes.md 2>/dev/null || echo "{{.app_name}} $VERSION" > /tmp/release-notes.md
