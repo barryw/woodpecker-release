@@ -1,0 +1,34 @@
+# RBAC so the Woodpecker CI pipeline can roll the config-service deployment.
+#
+# The build pipeline's `restart-config-service` step runs as the pipeline pod's
+# service account — `system:serviceaccount:woodpecker:default` — and calls
+# `kubectl rollout restart` + `rollout status` on this deployment. Without these
+# rights the step fails with:
+#   deployments.apps "woodpecker-config-service" is forbidden:
+#   User "system:serviceaccount:woodpecker:default" cannot get resource "deployments"
+# which leaves a freshly-built image un-deployed (the WAL-36 failure mode).
+#
+# Scoped to the woodpecker namespace and to this one workload's verbs only.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: config-service-deployer
+  namespace: woodpecker
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: config-service-deployer
+  namespace: woodpecker
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: woodpecker
+roleRef:
+  kind: Role
+  name: config-service-deployer
+  apiGroup: rbac.authorization.k8s.io
