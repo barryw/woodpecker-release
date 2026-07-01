@@ -66,6 +66,14 @@ steps:
       # SwiftPM resolves the private PixelCanvasKit package non-interactively;
       # give it a credential in a workspace-local git config (never the shared
       # ~/.gitconfig). Woodpecker masks the secret value in logs.
+      #
+      # WAL-142: still on the shared PAT. BLOCKED on the App install: a minted
+      # token can only read repos in the installation + a matching profile, and
+      # PixelCanvasKit is in NEITHER (mint --repos PixelCanvasKit returns 422).
+      # Migrating requires Barry to add PixelCanvasKit to the WHI GitHub App
+      # installation and a read-only `swiftpm-read` profile (PixelCanvasKit,
+      # contents=read); then this becomes a vendored-mint step like
+      # release-macos-app. Until then this consumer keeps the PAT.
       GITHUB_TOKEN:
         from_secret: github_token
     commands:
