@@ -16,7 +16,11 @@ when:
     branch: main
     path:
       include:
-        - website/**
+        # Content-trigger path. Defaults to website/** so every existing consumer
+        # is unchanged; the house hub sets `website_path: web/**` (its content
+        # lives under web/, per ADR 0001/0002 — WAL-54/WAL-126) so content edits
+        # auto-deploy instead of needing a deploy/ touch or a manual run.
+        - {{or .website_path "website/**"}}
         - deploy/**
 
 labels:
