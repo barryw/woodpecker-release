@@ -16,65 +16,47 @@ steps:
     commands:
       - bats plugin/test/
 
-  # WAL-122/125: mint a ~1h GitHub App installation token (ghcr-push profile,
-  # packages=write) scoped to this repo, replacing the shared admin PAT for the
-  # kaniko GHCR pushes below. Written to the shared workspace so the kaniko
-  # `debug` (busybox) steps — which have no bash/openssl/curl to mint inline —
-  # can read it. Vendored jq-free minter: ci/mint-token.sh (from WAL-74).
-  - name: mint-ghcr-token
-    image: alpine:3.21
-    environment:
-      GH_APP_ID:
-        from_secret: gh_app_id
-      GH_APP_INSTALLATION_ID:
-        from_secret: gh_app_installation_id
-      GH_APP_PRIVATE_KEY:
-        from_secret: gh_app_private_key
-      MINT_PERMS: packages=write,metadata=read
-    commands:
-      - apk add --no-cache bash openssl curl > /dev/null 2>&1
-      - bash ci/mint-token.sh > "$CI_WORKSPACE/.ghcr-token"
-      - chmod 600 "$CI_WORKSPACE/.ghcr-token"
-    when:
-      - event: push
-        branch: main
-    depends_on: [lint, test]
-
   - name: build-plugin-base
     image: gcr.io/kaniko-project/executor:debug
+    environment:
+      GHCR_TOKEN:
+        from_secret: github_token
     commands:
-      - GHCR_TOKEN="$(cat "$CI_WORKSPACE/.ghcr-token")"
       - mkdir -p /kaniko/.docker
       - 'echo "{\"auths\":{\"ghcr.io\":{\"username\":\"barryw\",\"password\":\"$GHCR_TOKEN\"}}}" > /kaniko/.docker/config.json'
       - /kaniko/executor --dockerfile=plugin/Dockerfile --context=plugin --target=base --destination=ghcr.io/barryw/woodpecker-release:latest
     when:
       - event: push
         branch: main
-    depends_on: [lint, test, mint-ghcr-token]
+    depends_on: [lint, test]
 
   - name: build-plugin-go
     image: gcr.io/kaniko-project/executor:debug
+    environment:
+      GHCR_TOKEN:
+        from_secret: github_token
     commands:
-      - GHCR_TOKEN="$(cat "$CI_WORKSPACE/.ghcr-token")"
       - mkdir -p /kaniko/.docker
       - 'echo "{\"auths\":{\"ghcr.io\":{\"username\":\"barryw\",\"password\":\"$GHCR_TOKEN\"}}}" > /kaniko/.docker/config.json'
       - /kaniko/executor --dockerfile=plugin/Dockerfile --context=plugin --target=go --destination=ghcr.io/barryw/woodpecker-release:go
     when:
       - event: push
         branch: main
-    depends_on: [lint, test, mint-ghcr-token]
+    depends_on: [lint, test]
 
   - name: build-config-service
     image: gcr.io/kaniko-project/executor:debug
+    environment:
+      GHCR_TOKEN:
+        from_secret: github_token
     commands:
-      - GHCR_TOKEN="$(cat "$CI_WORKSPACE/.ghcr-token")"
       - mkdir -p /kaniko/.docker
       - 'echo "{\"auths\":{\"ghcr.io\":{\"username\":\"barryw\",\"password\":\"$GHCR_TOKEN\"}}}" > /kaniko/.docker/config.json'
       - /kaniko/executor --dockerfile=config-service/Dockerfile --context=config-service --destination=ghcr.io/barryw/woodpecker-config-service:latest
     when:
       - event: push
         branch: main
-    depends_on: [lint, test, mint-ghcr-token]
+    depends_on: [lint, test]
 
   - name: restart-config-service
     image: bitnami/kubectl:latest
