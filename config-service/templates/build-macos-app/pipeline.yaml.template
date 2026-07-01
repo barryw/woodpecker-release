@@ -26,9 +26,18 @@
 # — the proven NovaDraw pattern (WAL-29/35). Never write the shared runner's
 # ~/.gitconfig, and avoid the osxkeychain helper (it blocks on the locked CI
 # keychain). The github_token PAT has contents:read across the org, which is all
-# package resolution needs; this can move to a minted product-ci token later
-# (WAL-70/74) — set mint_token and supply the vendored minter, same idiom as
-# release-macos-app.
+# package resolution needs.
+#
+# GitHub auth (WAL-143): when `mint_token: true` is set, resolve PixelCanvasKit
+# with a short-lived, single-repo (PixelCanvasKit) contents:read GitHub App token
+# minted per run instead of the shared admin PAT — same idiom as release-macos-app.
+# The local backend has no plugin image, so the minter (bash/openssl/curl/jq —
+# mint-installation-token.sh + its profiles file) is vendored into the checked-out
+# repo's Scripts/ and run straight off the runner; the App key arrives via the
+# gh_app_* org secrets, so no pre-existing token is needed. The default profile is
+# `swiftpm-read` (PixelCanvasKit contents:read only). Falls back to the github_token
+# PAT when `mint_token` is unset. REQUIRES (WAL-143, Barry): barryw/PixelCanvasKit
+# added to the App installation selection, else the mint returns HTTP 422.
 #
 # CODE_SIGNING_ALLOWED=NO keeps the gate cert-free (the build/test runner has no
 # Developer ID requirement for a non-archiving test build).
@@ -62,12 +71,21 @@ steps:
     image: bash
     environment:
       LANG: en_US.UTF-8
-      LC_ALL: en_US.UTF-8
+      LC_ALL: en_US.UTF-8{{if .mint_token}}
+      # WAL-143: mint a short-lived, single-repo (PixelCanvasKit) contents:read App
+      # token for SwiftPM resolution instead of the shared PAT. Minter + profiles
+      # are vendored in Scripts/ and run off the native runner (no plugin image).
+      GH_APP_ID:
+        from_secret: gh_app_id
+      GH_APP_INSTALLATION_ID:
+        from_secret: gh_app_installation_id
+      GH_APP_PRIVATE_KEY:
+        from_secret: gh_app_private_key{{else}}
       # SwiftPM resolves the private PixelCanvasKit package non-interactively;
       # give it a credential in a workspace-local git config (never the shared
       # ~/.gitconfig). Woodpecker masks the secret value in logs.
       GITHUB_TOKEN:
-        from_secret: github_token
+        from_secret: github_token{{end}}
     commands:
       - export GIT_CONFIG_GLOBAL="$CI_WORKSPACE/.gitconfig.ci"
       # Disable any credential helper BEFORE the authenticated fetch. The runner
@@ -80,9 +98,14 @@ steps:
       # dialog on the host's screen (WAL-99). The token is already in the rewritten
       # URL below, so no helper is needed for auth. release-macos-app does the same.
       - git config --global credential.helper ""
-      - git config --global url."https://x-access-token:$GITHUB_TOKEN@github.com/".insteadOf "https://github.com/"
       - |
-        set -e
+        set -e{{if .mint_token}}
+        # WAL-143: exchange the WHI App key for a ~1h PixelCanvasKit contents:read
+        # token. Minted per run; vendored minter + profiles, no shared PAT in the
+        # auth path. (A minted var only lives in this shell block, so mint + the
+        # insteadOf rewrite that consumes it must stay together here.)
+        GITHUB_TOKEN=$(PROFILES_FILE="{{or .minter_profiles "Scripts/whi-token-profiles.env"}}" bash {{or .minter_path "Scripts/mint-installation-token.sh"}} --profile {{or .minter_profile "swiftpm-read"}}){{end}}
+        git config --global url."https://x-access-token:$GITHUB_TOKEN@github.com/".insteadOf "https://github.com/"
         xcodebuild test \
           -project "{{.project}}" \
           -scheme "{{.scheme}}" \
