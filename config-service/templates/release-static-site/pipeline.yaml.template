@@ -40,9 +40,25 @@ steps:
     commands:
       - kubectl get namespace {{or .k8s_namespace .site}} || kubectl create namespace {{or .k8s_namespace .site}}
       - kubectl get secret ghcr-secret -n {{or .k8s_namespace .site}} || kubectl get secret ghcr-secret -n default -o json | sed 's/"namespace":"default"/"namespace":"{{or .k8s_namespace .site}}"/' | kubectl apply -f -
+      # Resilience (WAL-104): a deploy must never take the live site down.
+      # 1) Validate the rendered manifests against the live cluster BEFORE
+      #    mutating anything. A bad manifest (e.g. the duplicate container port
+      #    that once wedged novuslang.com) fails the pipeline here, safely,
+      #    instead of half-applying and leaving the Deployment unreconcilable.
+      - kubectl apply -k {{or .deploy_path "deploy/"}} --dry-run=server
       - kubectl apply -k {{or .deploy_path "deploy/"}}
       - kubectl set image deployment/{{or .deployment_name (printf "%s-website" .site)}} {{or .container_name "website"}}=ghcr.io/barryw/{{or .image_name (printf "%s-website" .site)}}:build-$CI_PIPELINE_NUMBER -n {{or .k8s_namespace .site}}
-      - kubectl rollout status deployment/{{or .deployment_name (printf "%s-website" .site)}} -n {{or .k8s_namespace .site}} --timeout=120s
+      # 2) Roll forward; if the new revision never becomes Ready (bad image,
+      #    crashloop), auto-revert to the last good ReplicaSet so the site is
+      #    never stranded on a broken revision. The rolling update keeps old
+      #    pods serving until the new ones pass readiness.
+      - |
+        if ! kubectl rollout status deployment/{{or .deployment_name (printf "%s-website" .site)}} -n {{or .k8s_namespace .site}} --timeout=120s; then
+          echo "Rollout did not become healthy — rolling back to previous revision"
+          kubectl rollout undo deployment/{{or .deployment_name (printf "%s-website" .site)}} -n {{or .k8s_namespace .site}}
+          kubectl rollout status deployment/{{or .deployment_name (printf "%s-website" .site)}} -n {{or .k8s_namespace .site}} --timeout=120s
+          exit 1
+        fi
       - kubectl get pods -n {{or .k8s_namespace .site}}
     depends_on:
       - build-push
