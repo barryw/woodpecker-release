@@ -40,13 +40,24 @@ steps:
     commands:
       - kubectl get namespace {{or .k8s_namespace .site}} || kubectl create namespace {{or .k8s_namespace .site}}
       - kubectl get secret ghcr-secret -n {{or .k8s_namespace .site}} || kubectl get secret ghcr-secret -n default -o json | sed 's/"namespace":"default"/"namespace":"{{or .k8s_namespace .site}}"/' | kubectl apply -f -
-      # Resilience (WAL-104): a deploy must never take the live site down.
+      # Resilience (WAL-104 / WAL-124): a deploy must never take the live site down.
+      # Server-side apply (SSA) replaces client-side 3-way strategic merge. SSA
+      # does a structured field-manager merge, which STRUCTURALLY eliminates the
+      # duplicate-container-port failure class that once wedged novuslang.com
+      # (a strategic-merge artifact — client-side merge could not reconcile the
+      # duplicated port and left the Deployment unpatchable). --force-conflicts
+      # takes ownership of fields still held by the old client-side-apply manager
+      # on the first SSA of each object; harmless and idempotent thereafter.
+      # NOTE: SSA PATCHes every rendered object. The namespace-scoped
+      # woodpecker:default CI SA is Forbidden on the cluster-scoped Namespace, so
+      # every consumer's CI kustomize build MUST NOT emit namespace.yaml (bootstrap
+      # the namespace out-of-band; the `get namespace || create` line above covers
+      # first run). See WAL-108 / WAL-66.
       # 1) Validate the rendered manifests against the live cluster BEFORE
-      #    mutating anything. A bad manifest (e.g. the duplicate container port
-      #    that once wedged novuslang.com) fails the pipeline here, safely,
-      #    instead of half-applying and leaving the Deployment unreconcilable.
-      - kubectl apply -k {{or .deploy_path "deploy/"}} --dry-run=server
-      - kubectl apply -k {{or .deploy_path "deploy/"}}
+      #    mutating anything — a bad manifest fails the pipeline here, safely,
+      #    instead of half-applying.
+      - kubectl apply -k {{or .deploy_path "deploy/"}} --server-side --force-conflicts --dry-run=server
+      - kubectl apply -k {{or .deploy_path "deploy/"}} --server-side --force-conflicts
       - kubectl set image deployment/{{or .deployment_name (printf "%s-website" .site)}} {{or .container_name "website"}}=ghcr.io/barryw/{{or .image_name (printf "%s-website" .site)}}:build-$CI_PIPELINE_NUMBER -n {{or .k8s_namespace .site}}
       # 2) Roll forward; if the new revision never becomes Ready (bad image,
       #    crashloop), auto-revert to the last good ReplicaSet so the site is
