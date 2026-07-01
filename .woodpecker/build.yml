@@ -16,6 +16,21 @@ steps:
     commands:
       - bats plugin/test/
 
+  - name: test-config-service
+    image: golang:1.25-alpine
+    environment:
+      GOTOOLCHAIN: local
+    commands:
+      # Mirror the Dockerfile's module bootstrap (go.mod is generated, not
+      # committed), then run the config-service unit tests.
+      - apk add --no-cache git > /dev/null 2>&1
+      - cd config-service/src
+      - go mod init woodpecker-config-service
+      - go get go.woodpecker-ci.org/woodpecker/v3@v3.13.0
+      - go mod tidy
+      - go vet ./...
+      - go test ./...
+
   - name: build-plugin-base
     image: gcr.io/kaniko-project/executor:debug
     environment:
@@ -56,7 +71,7 @@ steps:
     when:
       - event: push
         branch: main
-    depends_on: [lint, test]
+    depends_on: [lint, test, test-config-service]
 
   - name: restart-config-service
     image: bitnami/kubectl:latest
