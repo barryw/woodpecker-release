@@ -173,6 +173,22 @@ func handleHttpRequest(writer http.ResponseWriter, request *http.Request) {
 		generatedConfigs = append(generatedConfigs, configs...)
 	}
 
+	// Merge in the repo's own .woodpecker/*.{yml,yaml} pipelines so the house
+	// template is ADDITIVE rather than a full replacement. Returning template
+	// configs to Woodpecker replaces the raw repo config wholesale, so a repo
+	// that adopts woodpecker-template.yaml would otherwise silently lose every
+	// other pipeline it defines — its bump/build/release/test workflows never
+	// run on push (WAL-162). Each merged config keeps its own `when:` block, so
+	// the static-site deploy and the repo's build/release chain each fire on
+	// their own trigger. On a name collision the generated template config wins.
+	for _, rc := range getRepoConfigsFromForge(req) {
+		if hasConfigNamed(generatedConfigs, rc.Name) {
+			log.Printf("Skipping repo config %q: name collides with a generated template config", rc.Name)
+			continue
+		}
+		generatedConfigs = append(generatedConfigs, rc)
+	}
+
 	if generatedConfigs != nil {
 		writer.WriteHeader(http.StatusOK)
 		err := json.NewEncoder(writer).Encode(woodpeckerResponse{
@@ -188,6 +204,16 @@ func handleHttpRequest(writer http.ResponseWriter, request *http.Request) {
 		// No configs could be generated from template data, try to use it as-is (still most likely an error).
 		writer.WriteHeader(http.StatusNoContent)
 	}
+}
+
+// hasConfigNamed reports whether configs already contains an entry with name.
+func hasConfigNamed(configs []configData, name string) bool {
+	for _, c := range configs {
+		if c.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 func verifySignature(r *http.Request) bool {

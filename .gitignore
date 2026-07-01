@@ -1,2 +1,7 @@
 dist/
 *.sig
+
+# The config-service Go module is initialised at image-build time
+# (Dockerfile: go mod init/get/tidy). Committing these would break that build.
+config-service/src/go.mod
+config-service/src/go.sum
