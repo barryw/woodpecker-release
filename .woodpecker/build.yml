@@ -23,8 +23,16 @@ steps:
     commands:
       # Mirror the Dockerfile's module bootstrap (go.mod is generated, not
       # committed), then run the config-service unit tests.
+      #
+      # IMPORTANT: run in an isolated copy, NOT in config-service/src. Woodpecker
+      # steps share one workspace volume; the kaniko build-config-service step
+      # (--context=config-service, Dockerfile `COPY src/ .` then `go mod init`)
+      # runs later against the SAME tree. If we generate go.mod in-place here it
+      # gets copied into the build context and the Dockerfile's `go mod init`
+      # fails with "go.mod already exists". Building in /tmp keeps src/ pristine.
       - apk add --no-cache git > /dev/null 2>&1
-      - cd config-service/src
+      - cp -r config-service/src /tmp/cs-test
+      - cd /tmp/cs-test
       - go mod init woodpecker-config-service
       - go get go.woodpecker-ci.org/woodpecker/v3@v3.13.0
       - go mod tidy
