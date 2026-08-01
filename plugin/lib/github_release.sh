@@ -1,5 +1,14 @@
 #!/bin/bash
 # github_release.sh — Create GitHub Releases with optional asset uploads
+#
+# POSIX sh only below `set -e`: this file is sourced both by the plugin's
+# bash entrypoint (plugin/entrypoint.sh, ~20 repos) and directly by
+# `commands:` steps on the Alpine plugin image, which Woodpecker runs under
+# busybox ash (/bin/sh -e). No bash arrays, no [[ ]], no =~. `local` is
+# fine — both bash and ash support it, and keeping the bash shebang here
+# (shellcheck reads dialect from it) keeps `local` from tripping SC3043;
+# the file is always sourced, never executed, so the shebang itself is
+# inert. See plugin/test/test_github_release.bats for the sh -n guard.
 
 set -e
 
@@ -16,34 +25,36 @@ github_release_create() {
     return 1
   fi
 
-  # Detect pre-release versions
-  if [[ "$version" =~ -(alpha|beta|rc|dev) ]]; then
-    prerelease_flag="--prerelease"
-    echo "Detected pre-release version: ${version}"
-  fi
+  # Detect pre-release versions (POSIX case, no bash regex)
+  case "$version" in
+    *-alpha*|*-beta*|*-rc*|*-dev*)
+      prerelease_flag="--prerelease"
+      echo "Detected pre-release version: ${version}"
+      ;;
+  esac
 
   echo "Creating GitHub Release ${version} for ${repo}..."
 
-  # Build args array
-  local args=("$version" --repo "$repo" --title "$version")
+  # Build the gh args as positional parameters (no bash arrays)
+  set -- "$version" --repo "$repo" --title "$version"
 
   if [ -n "$changelog_file" ] && [ -f "$changelog_file" ]; then
-    args+=(--notes-file "$changelog_file")
+    set -- "$@" --notes-file "$changelog_file"
   else
-    args+=(--notes "Release ${version}")
+    set -- "$@" --notes "Release ${version}"
   fi
 
   if [ -n "$prerelease_flag" ]; then
-    args+=(--prerelease)
+    set -- "$@" --prerelease
   fi
 
   if [ "${PLUGIN_DRAFT:-false}" = "true" ]; then
-    args+=(--draft)
+    set -- "$@" --draft
     echo "Creating as draft; publish with github_release_publish after artifacts land."
   fi
 
   # Create the release (ignore if already exists)
-  if ! gh release create "${args[@]}" 2>&1; then
+  if ! gh release create "$@" 2>&1; then
     echo "Note: gh release create returned non-zero (release may already exist)"
   fi
 }

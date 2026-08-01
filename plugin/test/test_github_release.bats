@@ -67,3 +67,14 @@ setup() {
   [[ "$output" == *"release edit v1.2.3"* ]]
   [[ "$output" == *"--draft=false"* ]]
 }
+
+@test "github_release.sh parses under /bin/sh (POSIX, no bashisms)" {
+  # This file is sourced by Woodpecker `commands:` steps on the Alpine
+  # plugin image, which run under busybox ash, not bash. A bashism here
+  # (arrays, [[ ]], =~) is a parse-time error under ash that silently
+  # skips defining every function in this file. The CI test image
+  # (bats/bats, Alpine-based) has busybox ash as its own /bin/sh, so this
+  # runs the real check with no docker-in-docker needed.
+  run /bin/sh -n "$BATS_TEST_DIRNAME/../lib/github_release.sh"
+  [ "$status" -eq 0 ]
+}
