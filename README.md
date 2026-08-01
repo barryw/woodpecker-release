@@ -335,6 +335,18 @@ The bump commit includes `[skip ci]` to prevent infinite pipeline loops.
 | `terraform_manifest` | `false` | Generate Terraform Registry manifest |
 | `pihole_test` | `false` | Enable PiHole acceptance test service |
 
+**release-dotnet-library:**
+| Parameter | Default | Description |
+|---|---|---|
+| `sdk_image` | `mcr.microsoft.com/dotnet/sdk:10.0` | .NET SDK image for build/test/conformance/nuget-publish steps |
+| `setup_commands` | — | Commands to run before `dotnet build`/`dotnet test` (e.g. installing extra tools) |
+| `test_project` | — | Path passed to `dotnet test`; empty runs the default test discovery |
+| `test_filter` | — | `--filter` expression for `dotnet test`, only added if set |
+| `conformance_project` | — | If set, adds a `conformance` step running `dotnet test <project>` |
+| `conformance_setup` | — | Extra setup commands run only in the `conformance` step, after `setup_commands` |
+| `pack_project` | — (**required** if `nuget_publish: true`) | Project path passed to `dotnet pack`. The config service does not enforce `missingkey=error` — a typo here silently renders empty, so `dotnet pack` packs the wrong (or no) project with a green pipeline. |
+| `nuget_publish` | `false` | Enables the `nuget-publish` and `finalize-release` steps and switches `PLUGIN_DRAFT` to `"true"`. A typo in this key (e.g. `nuget_pubish`) is read as unset: it silently drops both steps **and** flips `PLUGIN_DRAFT` back to `"false"`, producing a public GitHub Release for a version whose package was never published — with a green pipeline. |
+
 **release-terraform:**
 | Parameter | Default | Description |
 |---|---|---|
