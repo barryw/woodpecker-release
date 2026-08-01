@@ -37,6 +37,11 @@ github_release_create() {
     args+=(--prerelease)
   fi
 
+  if [ "${PLUGIN_DRAFT:-false}" = "true" ]; then
+    args+=(--draft)
+    echo "Creating as draft; publish with github_release_publish after artifacts land."
+  fi
+
   # Create the release (ignore if already exists)
   if ! gh release create "${args[@]}" 2>&1; then
     echo "Note: gh release create returned non-zero (release may already exist)"
@@ -57,4 +62,20 @@ github_release_upload() {
   echo "Uploading $# asset(s) to release ${version}..."
   gh release upload "$version" "$@" --repo "$repo" --clobber
   echo "Assets uploaded successfully"
+}
+
+# Flip a draft Release public. Called after artifacts have been published, so a
+# failed artifact step never leaves a public Release claiming a version that
+# does not exist.
+github_release_publish() {
+  local version="$1"
+  local repo="${CI_REPO:?CI_REPO not set}"
+
+  if [ -z "$version" ]; then
+    echo "ERROR: github_release_publish requires a version" >&2
+    return 1
+  fi
+
+  echo "Publishing draft Release ${version}..."
+  gh release edit "$version" --draft=false --repo "$repo"
 }

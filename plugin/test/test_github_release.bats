@@ -28,3 +28,42 @@ setup() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"pre-release"* ]]
 }
+
+@test "github_release_create passes --draft when PLUGIN_DRAFT is true" {
+  export CI_REPO="barryw/testrepo"
+  export PLUGIN_DRAFT="true"
+  gh() { echo "$@" >> "$BATS_TEST_TMPDIR/gh-args"; }
+  export -f gh
+
+  source "$BATS_TEST_DIRNAME/../lib/github_release.sh"
+  github_release_create "v1.2.3" ""
+
+  run cat "$BATS_TEST_TMPDIR/gh-args"
+  [[ "$output" == *"--draft"* ]]
+}
+
+@test "github_release_create omits --draft by default" {
+  export CI_REPO="barryw/testrepo"
+  unset PLUGIN_DRAFT
+  gh() { echo "$@" >> "$BATS_TEST_TMPDIR/gh-args"; }
+  export -f gh
+
+  source "$BATS_TEST_DIRNAME/../lib/github_release.sh"
+  github_release_create "v1.2.3" ""
+
+  run cat "$BATS_TEST_TMPDIR/gh-args"
+  [[ "$output" != *"--draft"* ]]
+}
+
+@test "github_release_publish flips a draft public" {
+  export CI_REPO="barryw/testrepo"
+  gh() { echo "$@" >> "$BATS_TEST_TMPDIR/gh-args"; }
+  export -f gh
+
+  source "$BATS_TEST_DIRNAME/../lib/github_release.sh"
+  github_release_publish "v1.2.3"
+
+  run cat "$BATS_TEST_TMPDIR/gh-args"
+  [[ "$output" == *"release edit v1.2.3"* ]]
+  [[ "$output" == *"--draft=false"* ]]
+}
