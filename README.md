@@ -122,6 +122,28 @@ data:
   k8s_container: your-container
 ```
 
+**For a .NET library** (build + test + optional conformance suite + release + NuGet publish):
+```yaml
+template: release-dotnet-library
+data:
+  sdk_image: "mcr.microsoft.com/dotnet/sdk:10.0"
+  test_project: "tests/MyLib.Tests"
+  test_filter: "Category!=Performance"
+  pack_project: "src/MyLib"
+  nuget_publish: true
+  # optional:
+  # setup_commands: ["apt-get update && apt-get install -y some-tool"]
+  # conformance_project: "tests/MyLib.Conformance"
+  # conformance_setup: ["tests/MyLib.Conformance/build.sh"]
+```
+> Requires the `nuget_api_key` secret when `nuget_publish: true`. The Release is
+> created as a **draft** and flipped public only after the package is on
+> nuget.org — nuget.org versions can be unlisted but never deleted, so a public
+> Release must never claim a version that failed to publish.
+>
+> The repo's `cog.toml` needs `pre_bump_hooks` that stamp the version into its
+> project files; see the .NET example in `onboarding/cog.toml`.
+
 **For a Terraform module** (validate + lint + security scan + test + release):
 ```yaml
 template: release-terraform
@@ -210,6 +232,7 @@ The repo needs these secrets in Woodpecker (Settings → Secrets):
 |---|---|---|
 | `github_token` | Yes (unless `mint_token`) | Git push, GitHub Release creation |
 | `gh_app_id` / `gh_app_installation_id` / `gh_app_private_key` | Only if `mint_token: true` | Mint a short-lived GitHub App installation token in place of the PAT (org-level secrets, WAL-70) |
+| `nuget_api_key` | Only if `nuget_publish: true` | Publishing packages to nuget.org |
 | `gpg_private_key` | Only if `gpg_sign: true` | Signing checksums |
 | `gpg_fingerprint` | Only if `gpg_sign: true` | GPG key ID |
 | `ci_keychain_password` | `release-macos-app` | Unlock signing keychain on the runner |
@@ -289,6 +312,7 @@ The bump commit includes `[skip ci]` to prevent infinite pipeline loops.
 | `release-go-library` | validate-commits → lint → test → release | Go libraries |
 | `release-go-binary` | validate-commits → lint → unit-test → [acceptance-test] → release (cross-compile + GPG) | Go binaries, Terraform providers |
 | `release-docker` | validate-commits → lint → test → release → docker-build → [deploy] | Docker projects |
+| `release-dotnet-library` | validate-commits → build → test → [conformance] → release (draft) → nuget-publish → finalize-release | .NET libraries published to NuGet |
 | `release-terraform` | validate-commits → tf-validate → tflint → trivy → [checkov] → [pytest] → [tf-test] → [tofu-validate] → [docs-check] → release | Terraform modules |
 | `release-macos-app` | validate-commits → version → test → build-sign → package → notarize-staple → release → restore-keychain (always) | Swift/macOS apps (darwin runner) |
 | `build-macos-app` | build-test (every push + PR) | macOS Swift build/test GATE (darwin runner) |
