@@ -86,7 +86,12 @@ steps:
       - 'VERSION=$(cat /woodpecker/version.txt 2>/dev/null || echo "NONE")'
       - 'test "$VERSION" != "NONE" || { echo "No new version, nothing to finalize"; exit 0; }'
       - '. /plugin/lib/github_release.sh'
-      - 'ASSETS=$(ls ./artifacts/*.nupkg ./artifacts/*.snupkg 2>/dev/null | tr "\n" " ")'
+      # `|| true` is deliberate: under pipefail an absent .snupkg makes `ls`
+      # fail the whole pipeline and abort this step before
+      # github_release_publish runs, leaving the GitHub Release a draft
+      # forever. The empty-ASSETS guard below already handles the no-match
+      # case correctly, so swallowing the status here loses nothing.
+      - 'ASSETS=$(ls ./artifacts/*.nupkg ./artifacts/*.snupkg 2>/dev/null | tr "\n" " " || true)'
       # $ASSETS is deliberately unquoted below: it must word-split into
       # separate gh upload arguments. Do not "fix" by quoting it.
       - 'if [ -n "$ASSETS" ]; then github_release_upload "$VERSION" $ASSETS; fi'
