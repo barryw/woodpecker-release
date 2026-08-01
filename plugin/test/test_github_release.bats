@@ -17,6 +17,36 @@ setup() {
   [[ "$output" == *"requires"* ]]
 }
 
+@test "github_release_upload reports failure and does not claim success" {
+  # gh fails; the function must surface that via its own exit status
+  # rather than letting the trailing echo mask it (the bug this guards
+  # against: `set -e` only aborts the *caller* on a failing command, it
+  # doesn't make a function's exit status anything other than its last
+  # command's — which used to be an unconditional success echo).
+  gh() { return 1; }
+  export -f gh
+
+  run github_release_upload "v1.2.3" "artifact.nupkg"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"ERROR: failed to upload assets"* ]]
+  [[ "$output" != *"Assets uploaded successfully"* ]]
+}
+
+@test "github_release_upload || guard fires on failure like finalize-release relies on" {
+  gh() { return 1; }
+  export -f gh
+
+  run bash -c '
+    . "'"$BATS_TEST_DIRNAME"'/../lib/github_release.sh"
+    export CI_REPO="barryw/test-repo"
+    gh() { return 1; }
+    github_release_upload "v1.2.3" "artifact.nupkg" || echo "WARN: asset upload failed; publishing Release anyway"
+  '
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"WARN: asset upload failed; publishing Release anyway"* ]]
+  [[ "$output" != *"Assets uploaded successfully"* ]]
+}
+
 @test "github_release_create detects pre-release" {
   # Mock gh to capture args
   gh() {

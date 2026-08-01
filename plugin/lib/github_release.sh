@@ -71,7 +71,10 @@ github_release_upload() {
   fi
 
   echo "Uploading $# asset(s) to release ${version}..."
-  gh release upload "$version" "$@" --repo "$repo" --clobber
+  if ! gh release upload "$version" "$@" --repo "$repo" --clobber; then
+    echo "ERROR: failed to upload assets to release ${version}" >&2
+    return 1
+  fi
   echo "Assets uploaded successfully"
 }
 
