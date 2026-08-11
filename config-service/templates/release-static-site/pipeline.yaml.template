@@ -21,6 +21,9 @@ when:
         # lives under web/, per ADR 0001/0002 — WAL-54/WAL-126) so content edits
         # auto-deploy instead of needing a deploy/ touch or a manual run.
         - {{or .website_path "website/**"}}
+{{if .website_extra_path}}
+        - {{.website_extra_path}}
+{{end}}
         - deploy/**
 
 labels:

@@ -419,6 +419,7 @@ The bump commit includes `[skip ci]` to prevent infinite pipeline loops.
 | `cloudflare_zone` | `cloudflare_zone_id` | Name of the Woodpecker secret holding the zone id |
 | `deploy_path` | `deploy/` | Kustomize dir for `kubectl apply -k` |
 | `website_path` | `website/**` | Push path glob that auto-triggers a deploy (plus `deploy/**`). Set to `web/**` for the house hub, whose content lives under `web/`. |
+| `website_extra_path` | — | Optional second push path glob for site inputs stored outside `website_path`. |
 | `website_context` | `website` | kaniko build context |
 | `dockerfile` | `website/Dockerfile` | Dockerfile path |
 | `image_name` | `<site>-website` | GHCR image name (under `ghcr.io/barryw/`) |

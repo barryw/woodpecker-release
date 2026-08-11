@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sort"
+	"strings"
 	"testing"
 
 	"go.woodpecker-ci.org/woodpecker/v3/server/model"
@@ -58,6 +59,20 @@ func TestHasConfigNamed(t *testing.T) {
 	}
 	if hasConfigNamed(cfgs, "bump") {
 		t.Error("did not expect bump to be present")
+	}
+}
+
+func TestStaticSiteTemplateIncludesExtraPath(t *testing.T) {
+	got, ok := applyTemplate(
+		"pipeline.yaml.template",
+		"/templates/release-static-site/pipeline.yaml.template",
+		map[string]string{
+			"site":               "novuslang",
+			"website_extra_path": "Novus.Tests/Examples/homepage_example.*",
+		},
+	)
+	if !ok || !strings.Contains(got, "- Novus.Tests/Examples/homepage_example.*") {
+		t.Fatalf("rendered template omitted extra website path:\n%s", got)
 	}
 }
 

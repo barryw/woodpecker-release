@@ -4,6 +4,7 @@ RUN apk add --no-cache make
 
 WORKDIR /src
 COPY src/ .
+COPY templates/ /templates/
 
 # Pin woodpecker/v3 to the last release that builds on Go 1.25 (the base image).
 # woodpecker/v3 >= v3.14.0 bumped its `go` directive to 1.26.0, which makes an
@@ -13,6 +14,7 @@ COPY src/ .
 RUN go mod init woodpecker-config-service && \
     go get go.woodpecker-ci.org/woodpecker/v3@v3.13.0 && \
     go mod tidy && \
+    go test ./... && \
     CGO_ENABLED=0 go build -o /out/config-service .
 
 FROM scratch
