@@ -34,15 +34,19 @@ steps:
   - name: release
     image: ghcr.io/barryw/woodpecker-release:latest
     pull: true
-    environment:
-      PLUGIN_GITHUB_TOKEN:
-        from_secret: github_token{{if .mint_token}}
+    environment:{{if .mint_token}}
+      # WAL-142: mint-mode delivers ONLY the short-lived App token — no shared PAT
+      # is present, so the plugin cannot silently fall back to it (entrypoint.sh).
+      # Once every consumer sets mint_token, the non-mint PAT branch and the shared
+      # github_token secret can both be removed (WAL-71 revoke).
       GH_APP_ID:
         from_secret: gh_app_id
       GH_APP_INSTALLATION_ID:
         from_secret: gh_app_installation_id
       GH_APP_PRIVATE_KEY:
-        from_secret: gh_app_private_key{{end}}
+        from_secret: gh_app_private_key{{else}}
+      PLUGIN_GITHUB_TOKEN:
+        from_secret: github_token{{end}}
       PLUGIN_GIT_EMAIL: ci@barrywalker.io
       PLUGIN_MODE: release-tag
     when:
